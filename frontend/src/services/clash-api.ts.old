@@ -1,0 +1,309 @@
+import axios from 'axios'
+import type { Clan, War } from '@/types/clash'
+import type { CapitalRaidSeasons } from '@/types/capital'
+import type { CWLGroup, MemberWarStats } from '@/types/cwl'
+
+// Use local proxy server to avoid CORS issues
+const API_BASE_URL = 'http://localhost:3001/api'
+
+// You'll need to get an API key from https://developer.clashofclans.com/
+// and add it to your .env file
+const API_KEY = import.meta.env.VITE_CLASH_API_KEY || ''
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Accept': 'application/json',
+  },
+})
+
+// Helper to encode clan tags (remove # and encode)
+export function encodeClanTag(tag: string): string {
+  return encodeURIComponent(tag.replace('#', ''))
+}
+
+// Check if API is configured
+const hasApiKey = !!API_KEY && API_KEY.length > 0
+
+// Internal API functions (only used when API key is available)
+const internalApi = {
+  async getClan(clanTag: string): Promise<Clan> {
+    const encodedTag = encodeClanTag(clanTag)
+    const response = await api.get<Clan>(`/clans/${encodedTag}`)
+    return response.data
+  },
+
+  async getCurrentWar(clanTag: string): Promise<War> {
+    const encodedTag = encodeClanTag(clanTag)
+    const response = await api.get<War>(`/clans/${encodedTag}/currentwar`)
+    return response.data
+  },
+
+  async getWarLog(clanTag: string): Promise<{ items: War[] }> {
+    const encodedTag = encodeClanTag(clanTag)
+    const response = await api.get<{ items: War[] }>(`/clans/${encodedTag}/warlog`)
+    return response.data
+  },
+
+  async getCapitalRaidSeasons(clanTag: string, limit: number = 10): Promise<CapitalRaidSeasons> {
+    const encodedTag = encodeClanTag(clanTag)
+    const response = await api.get<CapitalRaidSeasons>(`/clans/${encodedTag}/capitalraidseasons?limit=${limit}`)
+    return response.data
+  },
+
+  async getCWLGroup(clanTag: string): Promise<CWLGroup> {
+    const encodedTag = encodeClanTag(clanTag)
+    const response = await api.get<CWLGroup>(`/clans/${encodedTag}/currentwar/leaguegroup`)
+    return response.data
+  },
+
+  async getPlayer(playerTag: string): Promise<MemberWarStats> {
+    const encodedTag = encodeClanTag(playerTag)
+    const response = await api.get<MemberWarStats>(`/players/${encodedTag}`)
+    return response.data
+  },
+
+  async getCWLWar(warTag: string): Promise<War> {
+    const encodedTag = encodeURIComponent(warTag)
+    const response = await api.get<War>(`/clanwarleagues/wars/${encodedTag}`)
+    return response.data
+  },
+}
+
+// Public API - automatically switches between real API and mock data
+export const clashApi = {
+  // Get clan information
+  async getClan(clanTag: string): Promise<Clan> {
+    if (!hasApiKey) {
+      console.log('No API key configured, using mock data')
+      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate network delay
+      return mockClanData
+    }
+
+    try {
+      console.log('Fetching clan data from API:', clanTag)
+      return await internalApi.getClan(clanTag)
+    } catch (error) {
+      console.error('Error fetching clan data, falling back to mock data:', error)
+      return mockClanData
+    }
+  },
+
+  // Get current war information
+  async getCurrentWar(clanTag: string): Promise<War> {
+    if (!hasApiKey) {
+      console.log('No API key configured, using mock data')
+      await new Promise(resolve => setTimeout(resolve, 500))
+      throw new Error('Mock war data not implemented yet')
+    }
+
+    try {
+      console.log('Fetching war data from API:', clanTag)
+      return await internalApi.getCurrentWar(clanTag)
+    } catch (error) {
+      console.error('Error fetching war data:', error)
+      throw error
+    }
+  },
+
+  // Get war log
+  async getWarLog(clanTag: string): Promise<{ items: War[] }> {
+    if (!hasApiKey) {
+      console.log('No API key configured, using mock data')
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return { items: [] }
+    }
+
+    try {
+      console.log('Fetching war log from API:', clanTag)
+      return await internalApi.getWarLog(clanTag)
+    } catch (error) {
+      console.error('Error fetching war log:', error)
+      throw error
+    }
+  },
+
+  // Get capital raid seasons
+  async getCapitalRaidSeasons(clanTag: string, limit: number = 10): Promise<CapitalRaidSeasons> {
+    if (!hasApiKey) {
+      console.log('No API key configured, using mock data')
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return { items: [] }
+    }
+
+    try {
+      console.log('Fetching capital raid seasons from API:', clanTag)
+      return await internalApi.getCapitalRaidSeasons(clanTag, limit)
+    } catch (error) {
+      console.error('Error fetching capital raid seasons:', error)
+      throw error
+    }
+  },
+
+  // Get CWL group
+  async getCWLGroup(clanTag: string): Promise<CWLGroup | null> {
+    if (!hasApiKey) {
+      console.log('No API key configured, using mock data')
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return null
+    }
+
+    try {
+      console.log('Fetching CWL group from API:', clanTag)
+      return await internalApi.getCWLGroup(clanTag)
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        console.log('Not in CWL')
+        return null
+      }
+      console.error('Error fetching CWL group:', error)
+      throw error
+    }
+  },
+
+  // Get player details
+  async getPlayer(playerTag: string): Promise<MemberWarStats> {
+    if (!hasApiKey) {
+      console.log('No API key configured')
+      throw new Error('API key required')
+    }
+
+    try {
+      return await internalApi.getPlayer(playerTag)
+    } catch (error) {
+      console.error('Error fetching player data:', error)
+      throw error
+    }
+  },
+
+  // Get CWL war by war tag
+  async getCWLWar(warTag: string): Promise<War> {
+    if (!hasApiKey) {
+      throw new Error('API key required')
+    }
+
+    try {
+      return await internalApi.getCWLWar(warTag)
+    } catch (error) {
+      console.error('Error fetching CWL war:', error)
+      throw error
+    }
+  },
+
+  // Check if using real API or mock data
+  isUsingMockData(): boolean {
+    return !hasApiKey
+  },
+}
+
+// Mock data for development/demo purposes
+export const mockClanData: Clan = {
+  tag: '#2PP',
+  name: 'Example Clan',
+  type: 'inviteOnly',
+  description: 'A sample clan for demonstration',
+  location: {
+    id: 32000000,
+    name: 'International',
+    isCountry: false,
+  },
+  badgeUrls: {
+    small: 'https://api-assets.clashofclans.com/badges/70/default.png',
+    large: 'https://api-assets.clashofclans.com/badges/512/default.png',
+    medium: 'https://api-assets.clashofclans.com/badges/200/default.png',
+  },
+  clanLevel: 15,
+  clanPoints: 45000,
+  clanVersusPoints: 42000,
+  clanCapitalPoints: 850,
+  requiredTrophies: 2000,
+  warFrequency: 'always',
+  warWinStreak: 3,
+  warWins: 150,
+  warTies: 5,
+  warLosses: 45,
+  isWarLogPublic: true,
+  warLeague: {
+    id: 48000015,
+    name: 'Crystal League I',
+  },
+  members: 50,
+  memberList: [
+    {
+      tag: '#ABC123',
+      name: 'Player 1',
+      role: 'leader',
+      expLevel: 180,
+      league: {
+        id: 29000022,
+        name: 'Legend League',
+        iconUrls: {
+          small: 'https://api-assets.clashofclans.com/leagues/72/R2zmhyqQ0_lKcDR5EyghXCxgyC9mm_mVMIjAbmGoZtw.png',
+          tiny: 'https://api-assets.clashofclans.com/leagues/36/R2zmhyqQ0_lKcDR5EyghXCxgyC9mm_mVMIjAbmGoZtw.png',
+          medium: 'https://api-assets.clashofclans.com/leagues/288/R2zmhyqQ0_lKcDR5EyghXCxgyC9mm_mVMIjAbmGoZtw.png',
+        },
+      },
+      trophies: 5200,
+      clanRank: 1,
+      previousClanRank: 1,
+      donations: 500,
+      donationsReceived: 300,
+      townHallLevel: 16,
+      builderHallLevel: 10,
+    },
+    {
+      tag: '#DEF456',
+      name: 'Player 2',
+      role: 'coLeader',
+      expLevel: 165,
+      league: {
+        id: 29000021,
+        name: 'Titan League I',
+        iconUrls: {
+          small: 'https://api-assets.clashofclans.com/leagues/72/qVCZmeYH0lS7Gaa6YoB7LrEeOfH1e2EHTdNbJV2g0_s.png',
+          tiny: 'https://api-assets.clashofclans.com/leagues/36/qVCZmeYH0lS7Gaa6YoB7LrEeOfH1e2EHTdNbJV2g0_s.png',
+          medium: 'https://api-assets.clashofclans.com/leagues/288/qVCZmeYH0lS7Gaa6YoB7LrEeOfH1e2EHTdNbJV2g0_s.png',
+        },
+      },
+      trophies: 4800,
+      clanRank: 2,
+      previousClanRank: 2,
+      donations: 450,
+      donationsReceived: 280,
+      townHallLevel: 15,
+      builderHallLevel: 10,
+    },
+    {
+      tag: '#GHI789',
+      name: 'Player 3',
+      role: 'admin',
+      expLevel: 150,
+      league: {
+        id: 29000020,
+        name: 'Titan League II',
+        iconUrls: {
+          small: 'https://api-assets.clashofclans.com/leagues/72/qVCZmeYH0lS7Gaa6YoB7LrEeOfH1e2EHTdNbJV2g0_s.png',
+          tiny: 'https://api-assets.clashofclans.com/leagues/36/qVCZmeYH0lS7Gaa6YoB7LrEeOfH1e2EHTdNbJV2g0_s.png',
+          medium: 'https://api-assets.clashofclans.com/leagues/288/qVCZmeYH0lS7Gaa6YoB7LrEeOfH1e2EHTdNbJV2g0_s.png',
+        },
+      },
+      trophies: 4500,
+      clanRank: 3,
+      previousClanRank: 4,
+      donations: 400,
+      donationsReceived: 320,
+      townHallLevel: 15,
+      builderHallLevel: 9,
+    },
+  ],
+  labels: [
+    {
+      id: 56000000,
+      name: 'Clan Wars',
+      iconUrls: {
+        small: 'https://api-assets.clashofclans.com/labels/64/lXaIuoTlfoNOY5fKcQGeT57apz1KFWkN9-raxqIlMbE.png',
+        medium: 'https://api-assets.clashofclans.com/labels/128/lXaIuoTlfoNOY5fKcQGeT57apz1KFWkN9-raxqIlMbE.png',
+      },
+    },
+  ],
+}
