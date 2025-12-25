@@ -4,8 +4,8 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // Set base path for GitHub Pages (use '/' for custom domain)
-  base: process.env.VITE_BASE_PATH || '/clan-manager/',
+  // Set base path for GitHub Pages
+  base: '/clan-manager/',
 
   plugins: [react()],
 
