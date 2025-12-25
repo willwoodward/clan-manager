@@ -18,7 +18,7 @@ function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="clan-manager-theme">
       <QueryClientProvider client={queryClient}>
-        <Router>
+        <Router basename="/clan-manager">
           <Routes>
             <Route path="/" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />
