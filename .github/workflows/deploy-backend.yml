@@ -55,14 +55,14 @@ jobs:
             cd /opt/clan-manager
 
             # Pull latest image
-            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull ghcr.io/${{ github.repository }}/backend:latest
 
             # Restart backend service
-            docker-compose -f docker-compose.prod.yml up -d backend
+            docker compose -f docker-compose.prod.yml up -d backend
 
             # Clean up old images
             docker image prune -f
 
             # Show status
-            docker-compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.prod.yml ps
