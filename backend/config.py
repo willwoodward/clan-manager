@@ -1,8 +1,9 @@
 """Configuration for FastAPI backend."""
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, Union
+import json
 
 
 class APISettings(BaseSettings):
@@ -27,12 +28,24 @@ class APISettings(BaseSettings):
     cache_ttl: int = 3600  # 1 hour
 
     # API
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    cors_origins: Union[list[str], str] = ["http://localhost:5173", "http://localhost:3000"]
     api_prefix: str = "/api"
 
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
+
+    @field_validator('cors_origins', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            # Try parsing as JSON first
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                # Fall back to comma-separated
+                return [origin.strip() for origin in v.split(',')]
+        return v
 
 
 # Global settings instance
