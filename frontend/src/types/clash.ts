@@ -63,6 +63,11 @@ export interface Clan {
   warLeague: {
     id: number
     name: string
+    iconUrls?: {
+      small: string
+      tiny: string
+      medium: string
+    }
   }
   members: number
   memberList: ClanMember[]
@@ -118,4 +123,5 @@ export interface War {
   endTime: string
   clan: WarClan
   opponent: WarClan
+  attacksPerMember?: number
 }

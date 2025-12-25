@@ -34,6 +34,10 @@ export interface MemberWarStats {
   leagueTier?: {
     id: number
     name: string
+    iconUrls?: {
+      small: string
+      large: string
+    }
   }
   donations: number
   donationsReceived: number

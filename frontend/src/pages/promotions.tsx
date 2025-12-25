@@ -93,12 +93,19 @@ const getRoleRequirements = (
 
 type Role = 'leader' | 'coLeader' | 'admin' | 'member'
 
+type DonationRequirements = {
+  member: { maintenance: number }
+  elder: { promotion: number; maintenance: number }
+  coLeader: { promotion: number; maintenance: number }
+}
+
 interface MemberAnalysis extends MemberWarStats {
   meetsCurrentRoleDonations: boolean
   meetsNextRoleDonations: boolean
   donationDeficit: number
   recommendation: 'promote' | 'maintain' | 'demote' | 'kick'
   recommendationReason: string
+  reasonDetails?: string
   warAttacksUsed: number
   warAttacksTotal: number
 }
@@ -134,7 +141,7 @@ export function Promotions() {
     setMemberMaintInput(value)
     const num = parseInt(value)
     if (!isNaN(num) && num >= 0) {
-      setDonationReqs(prev => ({
+      setDonationReqs((prev: DonationRequirements) => ({
         ...prev,
         member: { maintenance: num }
       }))
@@ -145,7 +152,7 @@ export function Promotions() {
     setElderPromoInput(value)
     const num = parseInt(value)
     if (!isNaN(num) && num >= 0) {
-      setDonationReqs(prev => ({
+      setDonationReqs((prev: DonationRequirements) => ({
         ...prev,
         elder: { ...prev.elder, promotion: num }
       }))
@@ -156,7 +163,7 @@ export function Promotions() {
     setElderMaintInput(value)
     const num = parseInt(value)
     if (!isNaN(num) && num >= 0) {
-      setDonationReqs(prev => ({
+      setDonationReqs((prev: DonationRequirements) => ({
         ...prev,
         elder: { ...prev.elder, maintenance: num }
       }))
@@ -167,7 +174,7 @@ export function Promotions() {
     setCoLeaderPromoInput(value)
     const num = parseInt(value)
     if (!isNaN(num) && num >= 0) {
-      setDonationReqs(prev => ({
+      setDonationReqs((prev: DonationRequirements) => ({
         ...prev,
         coLeader: { ...prev.coLeader, promotion: num }
       }))
@@ -178,7 +185,7 @@ export function Promotions() {
     setCoLeaderMaintInput(value)
     const num = parseInt(value)
     if (!isNaN(num) && num >= 0) {
-      setDonationReqs(prev => ({
+      setDonationReqs((prev: DonationRequirements) => ({
         ...prev,
         coLeader: { ...prev.coLeader, maintenance: num }
       }))
@@ -247,7 +254,10 @@ export function Promotions() {
         meetsNextRoleDonations: true,
         donationDeficit: 0,
         recommendation: 'maintain',
+        recommendationReason: 'Leader role - no automatic promotion/demotion',
         reasonDetails: 'Leader role - no automatic promotion/demotion',
+        warAttacksUsed: 0,
+        warAttacksTotal: 0,
       }
     }
 

@@ -67,7 +67,7 @@ export function CWL() {
   const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
   const [sortField, setSortField] = useState<SortField>('score')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const [memberStats, setMemberStats] = useState<Array<MemberWarStats & { score: number }>>([])
+  const [memberStats, setMemberStats] = useState<Array<MemberWarStats & { score: number; historicalStats?: any; participationRate?: number }>>([])
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [allCWLClans, setAllCWLClans] = useState<Array<{ clanTag: string; clanName: string; members: Array<{ townHallLevel: number }> }>>([])
   const [loadingCWLClans, setLoadingCWLClans] = useState(false)
@@ -178,7 +178,7 @@ export function CWL() {
           })
         )
 
-        setMemberStats(stats.filter((s): s is MemberWarStats & { score: number } => s !== null))
+        setMemberStats(stats.filter(s => s !== null) as Array<MemberWarStats & { score: number; historicalStats?: any; participationRate?: number }>)
       } catch (error) {
         console.error('Error fetching member stats:', error)
       } finally {
@@ -592,7 +592,7 @@ export function CWL() {
                         </Badge>
                       </td>
                       <td className="p-3">
-                        {member.leagueTier && (
+                        {member.leagueTier && member.leagueTier.iconUrls && (
                           <div className="flex items-center gap-1">
                             <img
                               src={getProxiedImageUrl(member.leagueTier.iconUrls.small)}
