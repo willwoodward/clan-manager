@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    image: ghcr.io/${GITHUB_REPOSITORY}/backend:latest
+    container_name: clan-manager-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"  # Only expose locally (Caddy will proxy)
+    environment:
+      - COC_EMAIL=${COC_EMAIL}
+      - COC_PASSWORD=${COC_PASSWORD}
+      - CLAN_TAG=${CLAN_TAG}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - /var/clan-data:/app/data
+    depends_on:
+      - redis
+    networks:
+      - clan-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: clan-manager-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - clan-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  clan-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
