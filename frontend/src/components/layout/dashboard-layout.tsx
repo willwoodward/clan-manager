@@ -13,9 +13,12 @@ import {
   UserPlus,
   TrendingUp,
   Gamepad2,
+  Menu,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/components/theme-provider'
+import { useState, useEffect } from 'react'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -32,14 +35,70 @@ const navigation = [
 export function DashboardLayout() {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Close sidebar when route changes (mobile)
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
+
+  // Close sidebar when clicking outside (mobile)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const sidebar = document.getElementById('sidebar')
+      const menuButton = document.getElementById('menu-button')
+
+      if (
+        sidebarOpen &&
+        sidebar &&
+        !sidebar.contains(event.target as Node) &&
+        menuButton &&
+        !menuButton.contains(event.target as Node)
+      ) {
+        setSidebarOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [sidebarOpen])
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Mobile menu button */}
+      <div className="fixed top-0 left-0 right-0 z-40 flex h-16 items-center gap-4 border-b bg-card px-4 lg:hidden">
+        <Button
+          id="menu-button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+        >
+          {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+        </Button>
+        <Shield className="h-6 w-6 text-primary" />
+        <h1 className="text-lg font-bold">Clan Manager</h1>
+      </div>
+
+      {/* Overlay for mobile */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-50 w-64 border-r bg-card">
+      <aside
+        id="sidebar"
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 w-64 border-r bg-card transition-transform duration-300 ease-in-out',
+          'lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
         <div className="flex h-full flex-col">
-          {/* Logo */}
-          <div className="flex h-16 items-center gap-2 border-b px-6">
+          {/* Logo - hidden on mobile (shown in header instead) */}
+          <div className="hidden h-16 items-center gap-2 border-b px-6 lg:flex">
             <Shield className="h-8 w-8 text-primary" />
             <div>
               <h1 className="text-xl font-bold">Clan Manager</h1>
@@ -48,7 +107,7 @@ export function DashboardLayout() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4">
+          <nav className="flex-1 space-y-1 p-4 pt-20 lg:pt-4">
             {navigation.map((item) => {
               const isActive = location.pathname === item.href
               return (
@@ -94,8 +153,8 @@ export function DashboardLayout() {
       </aside>
 
       {/* Main Content */}
-      <div className="pl-64">
-        <main className="p-8">
+      <div className="pt-16 lg:pl-64 lg:pt-0">
+        <main className="p-4 lg:p-8">
           <Outlet />
         </main>
       </div>

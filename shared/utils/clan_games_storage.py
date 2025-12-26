@@ -118,6 +118,8 @@ class ClanGamesStorage:
             logger.warning(f"No active session to update for {player_tag}")
             return
 
+        current_time = datetime.now().isoformat()
+
         if player_tag not in session["players"]:
             # New player who started contributing
             session["players"][player_tag] = {
@@ -125,14 +127,29 @@ class ClanGamesStorage:
                 "player_name": player_name,
                 "start_points": new_total_points,
                 "current_points": new_total_points,
-                "points_earned": 0
+                "points_earned": 0,
+                "first_contribution_time": current_time,
+                "last_update_time": current_time
             }
         else:
             # Update existing player
             player = session["players"][player_tag]
+            old_points_earned = player.get("points_earned", 0)
+            new_points_earned = new_total_points - player["start_points"]
+
             player["player_name"] = player_name  # Update name in case it changed
             player["current_points"] = new_total_points
-            player["points_earned"] = new_total_points - player["start_points"]
+            player["points_earned"] = new_points_earned
+            player["last_update_time"] = current_time
+
+            # Track when player first started contributing (if not already set)
+            if "first_contribution_time" not in player and new_points_earned > 0:
+                player["first_contribution_time"] = current_time
+
+            # Track completion time when they stop increasing (reached their final score)
+            # Update completion_time whenever points increase
+            if new_points_earned > old_points_earned:
+                player["completion_time"] = current_time
 
         self._save_current_session(session)
 
@@ -156,7 +173,14 @@ class ClanGamesStorage:
         # Generate leaderboard with rankings (only include contributors)
         players = list(session["players"].values())
         contributors = [p for p in players if p.get("points_earned", 0) > 0]
-        contributors.sort(key=lambda p: p.get("points_earned", 0), reverse=True)
+        # Sort by points earned (descending), then completion_rank/time (ascending for ties)
+        # Use completion_time if available (for automatic tracking), otherwise use completion_rank
+        contributors.sort(
+            key=lambda p: (
+                -p.get("points_earned", 0),
+                p.get("completion_rank", 999) if "completion_rank" in p else p.get("completion_time", "9999-99-99")
+            )
+        )
 
         leaderboard = []
         for rank, player in enumerate(contributors, 1):
@@ -207,7 +231,7 @@ class ClanGamesStorage:
             session: Specific session, or None for current
 
         Returns:
-            List of contributors (points > 0) sorted by points_earned descending
+            List of contributors (points > 0) sorted by points_earned descending, then completion_rank ascending
         """
         if session is None:
             session = self._load_current_session()
@@ -218,7 +242,21 @@ class ClanGamesStorage:
         players = list(session["players"].values())
         # Filter to only include contributors (points earned > 0)
         contributors = [p for p in players if p.get("points_earned", 0) > 0]
-        # Sort by points earned (descending)
-        contributors.sort(key=lambda p: p.get("points_earned", 0), reverse=True)
+
+        # Auto-assign completion_rank based on completion_time if not already set
+        # This allows for both manual ranks (from migration) and automatic timestamp-based ranks
+        for player in contributors:
+            if "completion_rank" not in player and "completion_time" in player:
+                # Will be assigned after sorting
+                pass
+
+        # Sort by points earned (descending), then by completion time/rank (ascending for ties)
+        # Use completion_time if available (for automatic tracking), otherwise use completion_rank
+        contributors.sort(
+            key=lambda p: (
+                -p.get("points_earned", 0),
+                p.get("completion_rank", 999) if "completion_rank" in p else p.get("completion_time", "9999-99-99")
+            )
+        )
 
         return contributors
