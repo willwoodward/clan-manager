@@ -80,13 +80,15 @@ async def health_check():
 
 
 # Import and include routers
-from .routers import coc, analytics, events, activity, clan_games
+from .routers import coc, analytics, events, activity, clan_games, clan_statistics, cwl_statistics
 
 app.include_router(coc.router, prefix=f"{settings.api_prefix}/coc", tags=["CoC API"])
 app.include_router(analytics.router, prefix=f"{settings.api_prefix}/analytics", tags=["Analytics"])
 app.include_router(events.router, prefix=f"{settings.api_prefix}/events", tags=["Events"])
 app.include_router(activity.router, prefix=f"{settings.api_prefix}/activity", tags=["Activity"])
 app.include_router(clan_games.router, prefix=f"{settings.api_prefix}/clan-games", tags=["Clan Games"])
+app.include_router(clan_statistics.router, prefix=f"{settings.api_prefix}/statistics", tags=["Statistics"])
+app.include_router(cwl_statistics.router, prefix=f"{settings.api_prefix}/cwl", tags=["CWL"])
 
 
 if __name__ == "__main__":

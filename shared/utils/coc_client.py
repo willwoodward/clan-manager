@@ -442,6 +442,8 @@ class CoCClient:
             "raidsCompleted": getattr(season, 'completed_raid_count', 0),
             "totalAttacks": getattr(season, 'attack_count', 0),
             "enemyDistrictsDestroyed": getattr(season, 'districts_destroyed', 0),
+            "offensiveReward": getattr(season, 'offensive_reward', 0),
+            "defensiveReward": getattr(season, 'defensive_reward', 0),
             "members": [
                 {
                     "tag": member.tag,
@@ -531,3 +533,76 @@ class CoCClient:
                 for round_data in (group.rounds if hasattr(group, 'rounds') else [])
             ] if hasattr(group, 'rounds') else [],
         }
+
+    @staticmethod
+    def cwl_war_to_dict(war) -> Dict[str, Any]:
+        """Convert CWL war to dict with full attack details."""
+        if not war:
+            return None
+
+        # Helper to convert player/attack data
+        def member_to_dict(member):
+            attacks = []
+            if hasattr(member, 'attacks') and member.attacks:
+                for attack in member.attacks:
+                    attacks.append({
+                        "attackerTag": member.tag,
+                        "defenderTag": attack.defender_tag,
+                        "stars": attack.stars,
+                        "destructionPercentage": attack.destruction,
+                        "order": attack.order,
+                    })
+
+            return {
+                "tag": member.tag,
+                "name": member.name,
+                "townhallLevel": member.town_hall,
+                "mapPosition": member.map_position,
+                "attacks": attacks,
+                "opponentAttacks": getattr(member, 'opponent_attacks', 0),
+            }
+
+        result = {
+            "state": war.state,
+            "warTag": war.war_tag,
+            "startTime": war.start_time.time.isoformat() if hasattr(war, 'start_time') and war.start_time else None,
+            "endTime": war.end_time.time.isoformat() if hasattr(war, 'end_time') and war.end_time else None,
+            "teamSize": war.team_size,
+            "attacksPerMember": war.attacks_per_member,
+            "clan": {
+                "tag": war.clan.tag,
+                "name": war.clan.name,
+                "badgeUrls": {
+                    "small": str(war.clan.badge.small) if war.clan.badge else None,
+                    "medium": str(war.clan.badge.medium) if war.clan.badge else None,
+                    "large": str(war.clan.badge.large) if war.clan.badge else None,
+                } if hasattr(war.clan, 'badge') and war.clan.badge else None,
+                "clanLevel": war.clan.level,
+                "attacks": war.clan.attacks if hasattr(war.clan, 'attacks') else 0,
+                "stars": war.clan.stars,
+                "destructionPercentage": war.clan.destruction,
+                "members": [
+                    member_to_dict(member)
+                    for member in (war.clan.members if hasattr(war.clan, 'members') else [])
+                ],
+            } if hasattr(war, 'clan') and war.clan else None,
+            "opponent": {
+                "tag": war.opponent.tag,
+                "name": war.opponent.name,
+                "badgeUrls": {
+                    "small": str(war.opponent.badge.small) if war.opponent.badge else None,
+                    "medium": str(war.opponent.badge.medium) if war.opponent.badge else None,
+                    "large": str(war.opponent.badge.large) if war.opponent.badge else None,
+                } if hasattr(war.opponent, 'badge') and war.opponent.badge else None,
+                "clanLevel": war.opponent.level,
+                "attacks": war.opponent.attacks if hasattr(war.opponent, 'attacks') else 0,
+                "stars": war.opponent.stars,
+                "destructionPercentage": war.opponent.destruction,
+                "members": [
+                    member_to_dict(member)
+                    for member in (war.opponent.members if hasattr(war.opponent, 'members') else [])
+                ],
+            } if hasattr(war, 'opponent') and war.opponent else None,
+        }
+
+        return result

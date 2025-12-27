@@ -320,6 +320,139 @@ export const activity = {
   }
 }
 
+/**
+ * Clan Games API client
+ */
+const clanGamesApi = axios.create({
+  baseURL: `${API_BASE_URL}/api/clan-games`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+/**
+ * Clan Games API
+ */
+export const clanGames = {
+  /**
+   * Get current clan games session
+   */
+  async getCurrentSession() {
+    const response = await clanGamesApi.get('/session/current')
+    return response.data
+  },
+
+  /**
+   * Get clan games leaderboard
+   */
+  async getLeaderboard() {
+    const response = await clanGamesApi.get('/leaderboard')
+    return response.data
+  }
+}
+
+/**
+ * Statistics API client
+ */
+const statisticsApi = axios.create({
+  baseURL: `${API_BASE_URL}/api/statistics`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+/**
+ * Statistics API - Clan resource statistics
+ */
+export const statistics = {
+  /**
+   * Get summary of all clan statistics
+   */
+  async getSummary(clanTag: string) {
+    const encodedTag = encodeTag(clanTag)
+    const response = await statisticsApi.get(`/clan/${encodedTag}/statistics/summary`)
+    return response.data
+  },
+
+  /**
+   * Get historical raid medal data
+   */
+  async getRaidMedalsHistory(clanTag: string, limit: number = 10) {
+    const encodedTag = encodeTag(clanTag)
+    const response = await statisticsApi.get(`/clan/${encodedTag}/statistics/raid-medals/history`, {
+      params: { limit }
+    })
+    return response.data
+  },
+
+  /**
+   * Get historical clan games data
+   */
+  async getClanGamesHistory(clanTag: string, limit: number = 10) {
+    const encodedTag = encodeTag(clanTag)
+    const response = await statisticsApi.get(`/clan/${encodedTag}/statistics/clan-games/history`, {
+      params: { limit }
+    })
+    return response.data
+  },
+
+  /**
+   * Get historical ore estimates
+   */
+  async getOreHistory(clanTag: string, days: number = 30) {
+    const encodedTag = encodeTag(clanTag)
+    const response = await statisticsApi.get(`/clan/${encodedTag}/statistics/ores/history`, {
+      params: { days }
+    })
+    return response.data
+  }
+}
+
+/**
+ * CWL (Clan War League) API endpoints
+ */
+const cwlApi = axios.create({
+  baseURL: `${API_BASE_URL}/cwl`,
+  timeout: 10000,
+})
+
+export const cwl = {
+  /**
+   * Get CWL history
+   */
+  async getHistory(limit: number = 12) {
+    const response = await cwlApi.get('/history', {
+      params: { limit }
+    })
+    return response.data
+  },
+
+  /**
+   * Get current CWL season
+   */
+  async getCurrentSeason() {
+    const response = await cwlApi.get('/current')
+    return response.data
+  },
+
+  /**
+   * Get CWL season details
+   */
+  async getSeasonDetails(seasonId: string) {
+    const response = await cwlApi.get(`/season/${seasonId}`)
+    return response.data
+  },
+
+  /**
+   * Get CWL war details
+   */
+  async getWarDetails(warTag: string) {
+    const encodedTag = encodeURIComponent(warTag)
+    const response = await cwlApi.get(`/war/${encodedTag}`)
+    return response.data
+  }
+}
+
 // Export the encode helper for backward compatibility
 export { encodeTag as encodeClanTag }
 
@@ -329,4 +462,8 @@ export default {
   analytics,
   clashApi,
   checkHealth,
+  events,
+  activity,
+  clanGames,
+  statistics,
 }

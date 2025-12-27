@@ -85,6 +85,7 @@ client = coc.EventsClient()
 monitor_task = None
 war_check_task = None
 legend_check_task = None
+cwl_check_task = None
 previous_war_state = None
 tracked_player_tags = set()
 last_saved_war = None  # Track last war we saved to avoid duplicates
@@ -220,6 +221,40 @@ async def save_war_data(war):
         # Mark this war as saved
         last_saved_war = war_identifier
 
+        # Track war attacks as activity points
+        try:
+            # Count attacks per player from our clan
+            attack_counts = {}
+            for attack in (war.attacks or []):
+                # Check if this attack was by one of our clan members
+                attacker_in_clan = any(m.tag == attack.attacker_tag for m in war.clan.members)
+                if attacker_in_clan:
+                    if attack.attacker_tag not in attack_counts:
+                        attack_counts[attack.attacker_tag] = 0
+                    attack_counts[attack.attacker_tag] += 1
+
+            # Update activity tracker for each attacker
+            for attacker_tag, attack_count in attack_counts.items():
+                # Find attacker name from clan members
+                attacker_name = next(
+                    (m.name for m in war.clan.members if m.tag == attacker_tag),
+                    "Unknown"
+                )
+
+                # Track each attack separately for proper activity scoring
+                for _ in range(attack_count):
+                    activity_tracker.update_activity(
+                        player_tag=attacker_tag,
+                        player_name=attacker_name,
+                        activity_type="attack",
+                        metadata={"attack_type": "cwl" if war.is_cwl else "war"}
+                    )
+
+                logger.info(f"Tracked {attack_count} war attacks for {attacker_name}")
+
+        except Exception as e:
+            logger.error(f"Error tracking war attacks as activity: {e}")
+
         logger.info(f"War data saved successfully: {storage_path}")
         logger.info(f"  War: {war.clan.name} vs {war.opponent.name}")
         logger.info(f"  Score: {war.clan.stars}-{war.opponent.stars} stars, {war.clan.destruction:.2f}%-{war.opponent.destruction:.2f}% destruction")
@@ -266,6 +301,11 @@ async def on_member_leave(member, clan):
             "player_name": member.name,
         }
     )
+    # Remove member from donation tracking
+    if member.tag in tracked_player_tags:
+        tracked_player_tags.discard(member.tag)
+        logger.info(f"Removed {member.tag} from donation tracking")
+        logger.info(f"Currently tracking {len(tracked_player_tags)} players")
 
 @client.event
 @coc.ClanEvents.level_change()
@@ -754,6 +794,38 @@ async def on_raid_weekend_end():
         # Save raid data
         event_storage.save_capital_raid(raid_data)
 
+        # Track capital raid attacks as activity points
+        try:
+            # Count attacks per player
+            attack_counts = {}
+            for attack in raid_data.get("attack_log", []):
+                attacker_tag = attack.get("attacker_tag")
+                attacker_name = attack.get("attacker_name")
+
+                if attacker_tag:
+                    if attacker_tag not in attack_counts:
+                        attack_counts[attacker_tag] = {
+                            "count": 0,
+                            "name": attacker_name or "Unknown"
+                        }
+                    attack_counts[attacker_tag]["count"] += 1
+
+            # Update activity tracker for each attacker
+            for attacker_tag, data in attack_counts.items():
+                # Track each attack separately for proper activity scoring
+                for _ in range(data["count"]):
+                    activity_tracker.update_activity(
+                        player_tag=attacker_tag,
+                        player_name=data["name"],
+                        activity_type="attack",
+                        metadata={"attack_type": "raid"}
+                    )
+
+                logger.info(f"Tracked {data['count']} capital raid attacks for {data['name']}")
+
+        except Exception as e:
+            logger.error(f"Error tracking capital raid attacks as activity: {e}")
+
         # Update state
         event_storage.save_state("capital_raid", {"last_raid": raid_id})
 
@@ -897,45 +969,44 @@ async def check_war_state():
                     # Check if this is a CWL war and save separately
                     if war.is_cwl:
                         try:
-                            logger.info(f"CWL war detected - saving CWL data")
-                            cwl_data = {
-                                "war_tag": war.war_tag if hasattr(war, 'war_tag') else f"cwl_{int(datetime.now().timestamp())}",
-                                "state": "ended",
-                                "end_time": datetime.now().isoformat(),
-                                "clan_tag": war.clan.tag,
-                                "clan_name": war.clan.name,
-                                "opponent_tag": war.opponent.tag,
-                                "opponent_name": war.opponent.name,
-                                "clan_stars": war.clan.stars,
-                                "clan_destruction": war.clan.destruction,
-                                "opponent_stars": war.opponent.stars,
-                                "opponent_destruction": war.opponent.destruction,
-                                "team_size": war.team_size,
-                                "attacks": [
-                                    {
-                                        "attacker_tag": attack.attacker_tag,
-                                        "defender_tag": attack.defender_tag,
-                                        "stars": attack.stars,
-                                        "destruction": attack.destruction,
-                                        "order": attack.order,
-                                    }
-                                    for attack in war.attacks
-                                ] if war.attacks else [],
-                            }
-                            event_storage.save_cwl_war(cwl_data)
-                            logger.info(f"Saved CWL war: {war.clan.name} vs {war.opponent.name}")
+                            logger.info(f"CWL war detected - saving CWL data with full attack details")
 
-                            event_logger.log_event(
-                                "CWL_WAR_END",
-                                "🏆 CWL War Ended",
-                                f"CWL war vs {war.opponent.name}: {war.clan.stars}-{war.opponent.stars} stars",
-                                {
-                                    "opponent_name": war.opponent.name,
-                                    "our_stars": war.clan.stars,
-                                    "their_stars": war.opponent.stars,
-                                    "is_cwl": True,
+                            # Import coc_client for converter
+                            from shared.utils.coc_client import coc_client
+
+                            # Get current CWL season ID
+                            try:
+                                league_group = await coc_client.get_cwl_group(settings.clan_tag)
+                                season_id = league_group.season if league_group else datetime.now().strftime("%Y-%m")
+                            except:
+                                season_id = datetime.now().strftime("%Y-%m")
+
+                            # Convert war to dict with full attack details
+                            war_dict = coc_client.cwl_war_to_dict(war)
+                            if war_dict:
+                                war_data = {
+                                    **war_dict,
+                                    "season_id": season_id,
+                                    "fetched_at": datetime.now().isoformat(),
                                 }
-                            )
+
+                                war_tag = war.war_tag if hasattr(war, 'war_tag') else f"cwl_{int(datetime.now().timestamp())}"
+                                await storage_manager.save_cwl_war(war_data, war_tag)
+                                logger.info(f"Saved CWL war with full attack details: {war.clan.name} vs {war.opponent.name}")
+
+                                event_logger.log_event(
+                                    "CWL_WAR_END",
+                                    "🏆 CWL War Ended",
+                                    f"CWL war vs {war.opponent.name}: {war.clan.stars}-{war.opponent.stars} stars",
+                                    {
+                                        "war_tag": war_tag,
+                                        "season_id": season_id,
+                                        "opponent_name": war.opponent.name,
+                                        "our_stars": war.clan.stars,
+                                        "their_stars": war.opponent.stars,
+                                        "is_cwl": True,
+                                    }
+                                )
                         except Exception as e:
                             logger.error(f"Error saving CWL war data: {e}")
 
@@ -986,9 +1057,160 @@ async def check_war_state():
         await asyncio.sleep(300)
 
 
+async def check_cwl_state():
+    """Check CWL state and sync data during active CWL."""
+    # Import coc_client for CWL methods
+    from shared.utils.coc_client import coc_client
+
+    last_cwl_check = None
+
+    while True:
+        try:
+            # Check CWL once per day (or every 6 hours during active CWL)
+            now = datetime.now()
+
+            # Try to get current CWL group
+            league_group = await coc_client.get_cwl_group(settings.clan_tag)
+
+            if league_group:
+                # CWL is active!
+                season_id = league_group.season  # Format: "YYYY-MM"
+                logger.info(f"CWL is active - Season {season_id}")
+
+                # Convert league group to dict
+                group_data = coc_client.cwl_group_to_dict(league_group)
+
+                # Get clan info for league tier
+                clan_data = await coc_client.get_clan(settings.clan_tag)
+                league_name = clan_data.war_league.name if clan_data and clan_data.war_league else "Unranked"
+
+                # Determine current round by checking which rounds have war tags
+                rounds_data = group_data.get("rounds", [])
+                current_round = 0
+                for i, round_info in enumerate(rounds_data):
+                    if round_info.get("warTags"):
+                        current_round = i + 1
+
+                # Collect all war tags from all rounds
+                all_war_tags = []
+                for round_info in rounds_data:
+                    for war_tag in round_info.get("warTags", []):
+                        if war_tag and war_tag != "#0":  # Skip placeholder tags
+                            all_war_tags.append(war_tag)
+
+                logger.info(f"Found {len(all_war_tags)} CWL wars in {len(rounds_data)} rounds")
+
+                # Fetch and store each war
+                wars_saved = 0
+                wars_won = 0
+                wars_lost = 0
+                total_stars = 0
+                total_destruction = 0
+
+                for war_tag in all_war_tags:
+                    try:
+                        # Check if we already have this war
+                        existing_war = await storage_manager.get_cwl_war(war_tag)
+                        if existing_war:
+                            # Update stats from existing war
+                            war_data = existing_war
+                        else:
+                            # Fetch new war data
+                            war = await coc_client.get_cwl_war(war_tag)
+                            if not war:
+                                continue
+
+                            # Convert to dict with full attack details
+                            war_dict = coc_client.cwl_war_to_dict(war)
+                            if not war_dict:
+                                continue
+
+                            # Add metadata
+                            war_data = {
+                                **war_dict,
+                                "season_id": season_id,
+                                "fetched_at": datetime.now().isoformat(),
+                            }
+
+                            # Save CWL war
+                            await storage_manager.save_cwl_war(war_data, war_tag)
+                            logger.info(f"Saved CWL war: {war_tag}")
+                            wars_saved += 1
+
+                        # Aggregate stats (only if war is from our clan)
+                        if war_data and war_data.get("clan", {}).get("tag") == settings.clan_tag:
+                            clan_stars = war_data.get("clan", {}).get("stars", 0)
+                            opponent_stars = war_data.get("opponent", {}).get("stars", 0)
+                            total_stars += clan_stars
+                            total_destruction += war_data.get("clan", {}).get("destructionPercentage", 0)
+
+                            if clan_stars > opponent_stars:
+                                wars_won += 1
+                            elif clan_stars < opponent_stars:
+                                wars_lost += 1
+
+                    except Exception as e:
+                        logger.error(f"Error fetching/saving CWL war {war_tag}: {e}")
+
+                # Calculate final rank and determine promotion/demotion
+                # This can only be determined after all 7 wars are complete
+                is_complete = len(all_war_tags) >= 7 and current_round >= 7
+
+                # Save/update season data
+                season_data = {
+                    "season_id": season_id,
+                    "clan_tag": settings.clan_tag,
+                    "start_time": None,  # CWL doesn't provide exact start time in API
+                    "end_time": None if not is_complete else datetime.now().isoformat(),
+                    "league_start": league_name,
+                    "league_end": league_name,  # Will be updated after season ends
+                    "total_stars": total_stars,
+                    "total_destruction": total_destruction,
+                    "wars_won": wars_won,
+                    "wars_lost": wars_lost,
+                    "wars_tied": len(all_war_tags) - wars_won - wars_lost,
+                    "final_rank": None,  # Cannot determine from API
+                    "group_clans": [clan["tag"] for clan in group_data.get("clans", [])],
+                    "promoted": False,  # Will be updated after season ends
+                    "demoted": False,
+                    "status": "complete" if is_complete else "active",
+                    "last_updated": datetime.now().isoformat(),
+                }
+
+                await storage_manager.save_cwl_season(season_data, season_id)
+                logger.info(f"Updated CWL season {season_id}: {wars_won}-{wars_lost} ({total_stars} stars)")
+
+                if wars_saved > 0:
+                    event_logger.log_event(
+                        "CWL_DATA_SYNC",
+                        "CWL Data Synced",
+                        f"Saved {wars_saved} CWL wars for season {season_id}",
+                        {
+                            "season_id": season_id,
+                            "wars_saved": wars_saved,
+                            "total_wars": len(all_war_tags),
+                        }
+                    )
+
+                # Check more frequently during active CWL (every 6 hours)
+                sleep_duration = 6 * 3600
+            else:
+                # No active CWL, check once per day
+                logger.debug("No active CWL - checking again tomorrow")
+                sleep_duration = 24 * 3600
+
+            last_cwl_check = now
+            await asyncio.sleep(sleep_duration)
+
+        except Exception as e:
+            logger.error(f"Error in CWL state check: {e}")
+            # On error, retry after 1 hour
+            await asyncio.sleep(3600)
+
+
 async def start_event_monitor():
     """Start the event monitoring service."""
-    global client, monitor_task, war_check_task
+    global client, monitor_task, war_check_task, cwl_check_task
 
     if not settings.coc_email or not settings.coc_password:
         logger.warning("COC_EMAIL and COC_PASSWORD not configured - event monitoring disabled")
@@ -1127,6 +1349,9 @@ async def start_event_monitor():
         # Start league reset checker (all leagues, runs 5 mins before reset)
         legend_check_task = asyncio.create_task(check_league_reset())
 
+        # Start CWL state checker
+        cwl_check_task = asyncio.create_task(check_cwl_state())
+
         logger.info("Event monitoring active (member joins/leaves, donations, wars, level ups, clan games, season/CWL/leagues/capital)")
 
     except coc.InvalidCredentials as error:
@@ -1137,7 +1362,7 @@ async def start_event_monitor():
 
 async def stop_event_monitor():
     """Stop the event monitoring service."""
-    global client, monitor_task, war_check_task, legend_check_task
+    global client, monitor_task, war_check_task, legend_check_task, cwl_check_task
 
     logger.info("Stopping event monitoring service")
 
@@ -1146,6 +1371,9 @@ async def stop_event_monitor():
 
     if legend_check_task:
         legend_check_task.cancel()
+
+    if cwl_check_task:
+        cwl_check_task.cancel()
 
     if client:
         await client.close()

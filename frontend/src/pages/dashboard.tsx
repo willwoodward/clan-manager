@@ -6,6 +6,7 @@ import { Users, Trophy, Swords, TrendingUp } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { EventLog } from '@/components/event-log'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
+import { StatisticsCards } from '@/components/statistics-cards'
 
 export function Dashboard() {
   const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
@@ -43,11 +44,11 @@ export function Dashboard() {
       color: 'text-yellow-500',
     },
     {
-      title: 'War Win Streak',
-      value: clan.warWinStreak,
+      title: 'War Record',
+      value: `${clan.warWins}-${clan.warLosses}`,
       icon: Swords,
-      description: 'Current streak',
-      color: 'text-red-500',
+      description: `${((clan.warWins / (clan.warWins + clan.warLosses + clan.warTies || 1)) * 100).toFixed(1)}% win rate • ${clan.warWinStreak} streak`,
+      color: clan.warWins > clan.warLosses ? 'text-green-500' : 'text-red-500',
     },
     {
       title: 'Clan Level',
@@ -113,35 +114,8 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* War Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">War Wins</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">{clan.warWins}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">War Losses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-500">{clan.warLosses}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-500">
-              {((clan.warWins / (clan.warWins + clan.warLosses + clan.warTies)) * 100).toFixed(1)}%
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Resource Statistics */}
+      <StatisticsCards clanTag={clanTag} />
 
       {/* Charts */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -188,46 +162,8 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Bottom Grid: Top Members & Event Log */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Members</CardTitle>
-            <CardDescription>Showing top 5 members by trophies</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {clan.memberList.slice(0, 5).map((member, index) => (
-                <div key={member.tag} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold">
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-medium">{member.name}</p>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Badge variant="outline" className="text-xs">
-                          {member.role}
-                        </Badge>
-                        <span>TH {member.townHallLevel}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{member.trophies.toLocaleString()}</p>
-                    <p className="text-sm text-muted-foreground">
-                      <Trophy className="inline h-3 w-3" /> {member.donations} donated
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Event Log */}
-        <EventLog limit={20} />
-      </div>
+      {/* Recent Activity */}
+      <EventLog limit={20} />
     </div>
   )
 }
