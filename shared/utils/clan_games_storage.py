@@ -8,6 +8,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Individual player points cap (as per Clash of Clans rules)
+POINTS_CAP = 10000
+
 
 class ClanGamesStorage:
     """Manage clan games sessions with persistence."""
@@ -135,7 +138,13 @@ class ClanGamesStorage:
             # Update existing player
             player = session["players"][player_tag]
             old_points_earned = player.get("points_earned", 0)
-            new_points_earned = new_total_points - player["start_points"]
+
+            # Calculate raw points earned (from achievement)
+            raw_points_earned = new_total_points - player["start_points"]
+
+            # Cap points_earned at POINTS_CAP (10,000) for leaderboard and scoring
+            # current_points still reflects the actual achievement value
+            new_points_earned = min(raw_points_earned, POINTS_CAP)
 
             player["player_name"] = player_name  # Update name in case it changed
             player["current_points"] = new_total_points

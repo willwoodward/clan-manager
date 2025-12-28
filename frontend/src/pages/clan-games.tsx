@@ -133,113 +133,119 @@ export function ClanGames() {
         <p className="text-muted-foreground">Track current clan games session progress</p>
       </div>
 
-      {/* Podium - Top 3 */}
-      {topThree.length >= 3 && (
-        <ClanGamesPodium topThree={topThree} onClick={setSelectedPlayerTag} />
-      )}
-
-      {/* Stats Summary */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {leaderboard.length === 0 ? (
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Participation Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{participationRate}%</div>
-            <p className="text-xs text-muted-foreground">
-              {participationCount} / {totalMembers} members
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Trophy className="h-4 w-4" />
-              Total Points
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalPoints.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">All members combined</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-              Participating
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">{participationCount}</div>
-            <p className="text-xs text-muted-foreground">Members active</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Participants Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Participants ({participationCount})</CardTitle>
-          <CardDescription>
-            Complete leaderboard for the current clan games session
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {leaderboard.length === 0 ? (
+          <CardContent className="pt-6">
             <div className="text-center py-8 text-muted-foreground">
               <Gamepad2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>No clan games session active</p>
+              <p className="font-medium">No clan games session active</p>
               <p className="text-sm">Waiting for clan games to start</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-3 font-medium">Rank</th>
-                    <th className="text-left p-3 font-medium">Player</th>
-                    <th className="text-left p-3 font-medium">Points Earned</th>
-                    <th className="text-left p-3 font-medium">Current Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboard.map((participant: any, index: number) => (
-                    <tr key={participant.player_tag} className="border-b hover:bg-accent/50 transition-colors">
-                      <td className="p-3">
-                        <Badge variant={index < 3 ? "default" : "secondary"}>
-                          #{index + 1}
-                        </Badge>
-                      </td>
-                      <td className="p-3">
-                        <ClickablePlayerName
-                          tag={participant.player_tag}
-                          name={participant.player_name}
-                          onClick={setSelectedPlayerTag}
-                        />
-                      </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Trophy className="h-4 w-4 text-yellow-500" />
-                          <span className="font-bold text-lg">{participant.points_earned.toLocaleString()}</span>
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <span className="text-sm text-muted-foreground">
-                          {participant.current_points.toLocaleString()}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Podium - Top 3 */}
+          {topThree.length >= 3 && (
+            <ClanGamesPodium topThree={topThree} onClick={setSelectedPlayerTag} />
           )}
-        </CardContent>
-      </Card>
+
+          {/* Stats Summary */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Participation Rate
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{participationRate}%</div>
+                <p className="text-xs text-muted-foreground">
+                  {participationCount} / {totalMembers} members
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Trophy className="h-4 w-4" />
+                  Total Points
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalPoints.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">All members combined</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  Participating
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-500">{participationCount}</div>
+                <p className="text-xs text-muted-foreground">Members active</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Participants Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>All Participants ({participationCount})</CardTitle>
+              <CardDescription>
+                Complete leaderboard for the current clan games session
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-3 font-medium">Rank</th>
+                      <th className="text-left p-3 font-medium">Player</th>
+                      <th className="text-left p-3 font-medium">Points Earned</th>
+                      <th className="text-left p-3 font-medium">Current Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboard.map((participant: any, index: number) => (
+                      <tr key={participant.player_tag} className="border-b hover:bg-accent/50 transition-colors">
+                        <td className="p-3">
+                          <Badge variant={index < 3 ? "default" : "secondary"}>
+                            #{index + 1}
+                          </Badge>
+                        </td>
+                        <td className="p-3">
+                          <ClickablePlayerName
+                            tag={participant.player_tag}
+                            name={participant.player_name}
+                            onClick={setSelectedPlayerTag}
+                          />
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <Trophy className="h-4 w-4 text-yellow-500" />
+                            <span className="font-bold text-lg">{participant.points_earned.toLocaleString()}</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-sm text-muted-foreground">
+                            {participant.current_points.toLocaleString()}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* Clan Games History */}
       {chartData.length > 0 && (
