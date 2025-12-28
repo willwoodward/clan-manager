@@ -32,6 +32,8 @@ interface LineChartProps extends ChartProps {
   strokeWidth?: number
   showDots?: boolean
   dotColor?: string
+  dualAxis?: boolean // Enable dual Y-axes
+  rightAxisDataKey?: string // Data key for right axis
 }
 
 interface BarChartProps extends ChartProps {
@@ -90,6 +92,8 @@ export function UnifiedLineChart({
   strokeWidth = 2,
   showDots = true,
   dotColor,
+  dualAxis = false,
+  rightAxisDataKey,
   children,
 }: LineChartProps) {
   return (
@@ -106,7 +110,21 @@ export function UnifiedLineChart({
               return `${date.getMonth() + 1}/${date.getDate()}`
             }}
           />
-          <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+          {dualAxis ? (
+            <>
+              <YAxis
+                yAxisId="left"
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+              />
+            </>
+          ) : (
+            <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+          )}
           <Tooltip
             content={(props) => (
               <CustomTooltip
@@ -120,6 +138,7 @@ export function UnifiedLineChart({
           />
           {children && <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />}
           <Line
+            {...(dualAxis && { yAxisId: 'left' })}
             type="monotone"
             dataKey={dataKey}
             stroke={stroke}

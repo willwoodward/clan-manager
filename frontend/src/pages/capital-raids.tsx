@@ -7,19 +7,25 @@ import {
   Swords,
   Shield,
   Users,
-  Target
+  Medal,
+  Coins
 } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useState } from 'react'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
+import { CapitalRaidsModal } from '@/components/capital-raids-modal'
+import { UnifiedLineChart } from '@/components/ui/chart'
 
 type SortField = 'name' | 'attacks' | 'capitalResourcesLooted' | 'avgPerAttack'
 type SortDirection = 'asc' | 'desc'
+type MetricType = 'medals' | 'gold' | 'trophies' | 'participation'
 
 export function CapitalRaids() {
   const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
   const [sortField, setSortField] = useState<SortField>('capitalResourcesLooted')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalType, setModalType] = useState<MetricType>('medals')
 
   const { data: seasons, isLoading } = useQuery({
     queryKey: ['capitalRaidSeasons', clanTag],
@@ -61,6 +67,44 @@ export function CapitalRaids() {
     ? Math.round(latestSeason.capitalTotalLoot / latestSeason.totalAttacks)
     : 0
 
+  // Handler for metric card clicks
+  const handleMetricClick = (type: MetricType) => {
+    setModalType(type)
+    setModalOpen(true)
+  }
+
+  // Calculate total raid medals
+  // Use previous season for medals if current season is ongoing (medals are 0 until weekend ends)
+  const currentSeasonMedals = latestSeason.offensiveReward + latestSeason.defensiveReward
+  const isOngoing = latestSeason.state === 'ongoing'
+  const previousSeason = seasons.items.length > 1 ? seasons.items[1] : null
+
+  // Display medals: use previous season if current is ongoing with 0 medals
+  const displaySeason = isOngoing && currentSeasonMedals === 0 && previousSeason ? previousSeason : latestSeason
+  // Offensive medals are per player (for 6 attacks), multiply by 6 to get total clan medals
+  const offensiveMedals = displaySeason.offensiveReward * 6
+  const defensiveMedals = displaySeason.defensiveReward
+  const totalMedals = offensiveMedals + defensiveMedals
+
+  // For comparison, use the season before the display season
+  const comparisonSeason = displaySeason === latestSeason && previousSeason
+    ? previousSeason
+    : seasons.items.length > 2 ? seasons.items[2] : null
+  const previousMedals = comparisonSeason
+    ? (comparisonSeason.offensiveReward * 6) + comparisonSeason.defensiveReward
+    : 0
+  const medalsDiff = totalMedals - previousMedals
+
+  // Calculate participation based on clan members (use current season)
+  const totalClanMembers = clanData?.members || latestSeason.members.length
+  const activeMembers = latestSeason.members.filter(m => m.attacks > 0).length
+  const participationRate = totalClanMembers > 0 ? Math.round((activeMembers / totalClanMembers) * 100) : 0
+  const goldDiff = previousSeason ? latestSeason.capitalTotalLoot - previousSeason.capitalTotalLoot : 0
+  const prevParticipation = previousSeason
+    ? Math.round((previousSeason.members.filter(m => m.attacks > 0).length / totalClanMembers) * 100)
+    : 0
+  const participationDiff = participationRate - prevParticipation
+
   // Calculate member metrics
   const membersWithMetrics = latestSeason.members.map(member => ({
     ...member,
@@ -87,25 +131,6 @@ export function CapitalRaids() {
   })
 
   const currentCapitalTrophies = clanData?.clanCapitalPoints || 0
-
-  // Calculate trend data if we have multiple seasons
-  const trendData = seasons.items.slice(0, 5).reverse().map(season => ({
-    date: new Date(season.endTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    medals: season.offensiveReward + season.defensiveReward,
-    loot: Math.round(season.capitalTotalLoot / 1000), // In thousands
-    raids: season.raidsCompleted,
-  }))
-
-  // Top attackers for chart
-  const topAttackers = membersWithMetrics.slice(0, 10).map(m => ({
-    name: m.name.length > 10 ? m.name.substring(0, 10) + '...' : m.name,
-    loot: m.capitalResourcesLooted,
-    avgPerAttack: m.avgPerAttack,
-  }))
-
-  // Calculate participation rate
-  const activeMembers = latestSeason.members.filter(m => m.attacks > 0).length
-  const participationRate = Math.round((activeMembers / latestSeason.members.length) * 100)
 
   // Defense stats
   const totalDefenseAttacks = latestSeason.defenseLog?.reduce((sum, log) => sum + log.attackCount, 0) ?? 0
@@ -137,62 +162,95 @@ export function CapitalRaids() {
         </CardHeader>
       </Card>
 
-      {/* Key Metrics */}
+      {/* Key Metrics - Clickable */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        {/* Raid Medals */}
+        <Card
+          className="cursor-pointer transition-all hover:border-purple-500 hover:shadow-lg"
+          onClick={() => handleMetricClick('medals')}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-purple-500" />
+              <Medal className="h-4 w-4 text-purple-500" />
+              Raid Medals
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-500">{totalMedals}</div>
+            <p className="text-xs text-muted-foreground">
+              {medalsDiff !== 0 && (
+                <span className={medalsDiff > 0 ? 'text-green-500' : 'text-red-500'}>
+                  {medalsDiff > 0 ? '↑' : '↓'} {Math.abs(medalsDiff)} vs last •{' '}
+                </span>
+              )}
+              Off: {offensiveMedals} | Def: {defensiveMedals}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Capital Gold */}
+        <Card
+          className="cursor-pointer transition-all hover:border-yellow-500 hover:shadow-lg"
+          onClick={() => handleMetricClick('gold')}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Coins className="h-4 w-4 text-yellow-500" />
+              Capital Gold
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-500">{latestSeason.capitalTotalLoot.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              {goldDiff !== 0 && (
+                <span className={goldDiff > 0 ? 'text-green-500' : 'text-red-500'}>
+                  {goldDiff > 0 ? '↑' : '↓'} {Math.abs(goldDiff).toLocaleString()} vs last •{' '}
+                </span>
+              )}
+              Avg: {avgGoldPerAttack}/attack
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Capital Trophies */}
+        <Card
+          className="cursor-pointer transition-all hover:border-blue-500 hover:shadow-lg"
+          onClick={() => handleMetricClick('trophies')}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-blue-500" />
               Capital Trophies
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-500">{currentCapitalTrophies}</div>
-            <p className="text-xs text-muted-foreground">Current clan capital</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              Capital Gold Looted
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{latestSeason.capitalTotalLoot.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-blue-500">{currentCapitalTrophies}</div>
             <p className="text-xs text-muted-foreground">
-              Avg {avgGoldPerAttack} per attack
+              Current clan capital points
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Participation */}
+        <Card
+          className="cursor-pointer transition-all hover:border-green-500 hover:shadow-lg"
+          onClick={() => handleMetricClick('participation')}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Target className="h-4 w-4 text-green-500" />
-              Raids Completed
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">{latestSeason.raidsCompleted}</div>
-            <p className="text-xs text-muted-foreground">
-              {latestSeason.enemyDistrictsDestroyed} districts destroyed
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-500" />
+              <Users className="h-4 w-4 text-green-500" />
               Participation
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-500">{participationRate}%</div>
+            <div className="text-2xl font-bold text-green-500">{participationRate}%</div>
             <p className="text-xs text-muted-foreground">
-              {activeMembers} of {latestSeason.members.length} members
+              {participationDiff !== 0 && (
+                <span className={participationDiff > 0 ? 'text-green-500' : 'text-red-500'}>
+                  {participationDiff > 0 ? '↑' : '↓'} {Math.abs(participationDiff)}% vs last •{' '}
+                </span>
+              )}
+              {activeMembers}/{totalClanMembers} members
             </p>
           </CardContent>
         </Card>
@@ -255,63 +313,41 @@ export function CapitalRaids() {
         </Card>
       </div>
 
-      {/* Charts */}
-      {seasons.items.length > 1 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Raid Medal Trends</CardTitle>
-              <CardDescription>Last 5 raid weekends</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" fontSize={12} />
-                  <YAxis fontSize={12} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="medals" stroke="hsl(var(--primary))" strokeWidth={2} name="Medals" />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Capital Gold Trends</CardTitle>
-              <CardDescription>Total loot in thousands</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" fontSize={12} />
-                  <YAxis fontSize={12} />
-                  <Tooltip />
-                  <Bar dataKey="loot" fill="hsl(var(--primary))" name="Gold (k)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Top Performers Chart */}
+      {/* Attacks per District Trend */}
       <Card>
         <CardHeader>
-          <CardTitle>Top Performers - Capital Gold Looted</CardTitle>
-          <CardDescription>Top 10 raiders by total capital gold</CardDescription>
+          <CardTitle>Attacks per District Trend</CardTitle>
+          <CardDescription>Average attacks needed per district over last 10 raid weekends (lower is more efficient)</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={topAttackers} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" fontSize={12} />
-              <YAxis dataKey="name" type="category" width={100} fontSize={12} />
-              <Tooltip />
-              <Bar dataKey="loot" fill="hsl(var(--primary))" name="Capital Gold" />
-            </BarChart>
-          </ResponsiveContainer>
+          {(() => {
+            const chartData = seasons.items
+              .slice()
+              .reverse()
+              .map((season) => {
+                const totalDistricts = season.attackLog?.reduce((sum, log) => sum + log.districtCount, 0) ?? 0
+                const attacksPerDistrict = totalDistricts > 0 ? season.totalAttacks / totalDistricts : 0
+
+                return {
+                  date: new Date(season.endTime).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                  }),
+                  attacksPerDistrict: parseFloat(attacksPerDistrict.toFixed(2)),
+                }
+              })
+
+            return (
+              <UnifiedLineChart
+                data={chartData}
+                dataKey="attacksPerDistrict"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                height={300}
+                showDots={true}
+              />
+            )
+          })()}
         </CardContent>
       </Card>
 
@@ -398,46 +434,89 @@ export function CapitalRaids() {
       {latestSeason.attackLog && latestSeason.attackLog.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Raid Targets</CardTitle>
-            <CardDescription>Clans attacked during this raid weekend</CardDescription>
+            <CardTitle>Raid Attacks Overview</CardTitle>
+            <CardDescription>
+              {latestSeason.raidsCompleted} {latestSeason.raidsCompleted === 1 ? 'raid' : 'raids'} completed • {latestSeason.totalAttacks} total attacks • {latestSeason.enemyDistrictsDestroyed} districts destroyed
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {latestSeason.attackLog.map((log, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    {log.defender.badgeUrls?.small && (
-                      <img
-                        src={getProxiedImageUrl(log.defender.badgeUrls.small)}
-                        alt={log.defender.name}
-                        className="h-12 w-12 rounded"
-                      />
-                    )}
-                    <div>
-                      <div className="font-medium">{log.defender.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Level {log.defender.level} • {log.defender.tag}
+                <Card key={index} className="border-2">
+                  <CardContent className="pt-6">
+                    <div className="text-center mb-4">
+                      <div className="text-lg font-semibold text-muted-foreground mb-1">
+                        Raid #{index + 1}
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        <Swords className="h-4 w-4 text-primary" />
+                        <span className="text-sm text-muted-foreground">
+                          vs {log.districtCount} district{log.districtCount !== 1 ? 's' : ''}
+                        </span>
                       </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Districts</div>
-                    <div className="font-bold">
-                      {log.districtsDestroyed}/{log.districtCount}
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({log.attackCount} attacks)
-                      </span>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Attacks</span>
+                        <span className="font-bold text-lg">{log.attackCount}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Avg per District</span>
+                        <span className="font-semibold">
+                          {log.districtCount > 0 ? (log.attackCount / log.districtCount).toFixed(1) : 0}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t">
+                        <div className="text-xs text-muted-foreground text-center">
+                          Efficiency: {log.districtCount > 0
+                            ? `${(2 / (log.attackCount / log.districtCount) * 100).toFixed(0)}%`
+                            : 'N/A'}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               ))}
+            </div>
+
+            <div className="mt-6 p-4 rounded-lg bg-muted/50">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-primary">
+                    {latestSeason.totalAttacks}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Total Attacks</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-primary">
+                    {latestSeason.raidsCompleted}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Raids</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-primary">
+                    {latestSeason.totalAttacks > 0
+                      ? (latestSeason.totalAttacks / (latestSeason.raidsCompleted || 1)).toFixed(1)
+                      : 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Avg Attacks/Raid</div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Modal for viewing trends */}
+      <CapitalRaidsModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        type={modalType}
+        clanTag={clanTag}
+      />
     </div>
   )
 }

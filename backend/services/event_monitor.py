@@ -762,6 +762,7 @@ async def on_raid_weekend_end():
             "clan_tag": clan.tag,
             "clan_level": clan.level,
             "capital_hall_level": clan.capital_hall,
+            "capital_points": clan.capital_points if hasattr(clan, 'capital_points') else 0,
             "total_capital_loot": 0,
             "raids_completed": 0,
             "attacks_used": 0,
@@ -777,6 +778,21 @@ async def on_raid_weekend_end():
                     "raids_completed": latest_raid.raids_completed,
                     "attacks_used": latest_raid.total_attacks,
                     "state": latest_raid.state.value if latest_raid.state else "ended",
+                    "start_time": latest_raid.start_time.time.isoformat() if hasattr(latest_raid, 'start_time') and latest_raid.start_time else None,
+                    "offensive_reward": latest_raid.offensive_reward if hasattr(latest_raid, 'offensive_reward') else 0,
+                    "defensive_reward": latest_raid.defensive_reward if hasattr(latest_raid, 'defensive_reward') else 0,
+                    "enemy_districts_destroyed": latest_raid.destroyed_district_count if hasattr(latest_raid, 'destroyed_district_count') else 0,
+                    "members": [
+                        {
+                            "tag": member.tag,
+                            "name": member.name,
+                            "attack_count": member.attack_count if hasattr(member, 'attack_count') else 0,
+                            "attack_limit": member.attack_limit if hasattr(member, 'attack_limit') else 5,
+                            "bonus_attack_limit": member.bonus_attack_limit if hasattr(member, 'bonus_attack_limit') else 0,
+                            "capital_resources_looted": member.capital_resources_looted if hasattr(member, 'capital_resources_looted') else 0,
+                        }
+                        for member in latest_raid.members
+                    ] if hasattr(latest_raid, 'members') and latest_raid.members else [],
                     "attack_log": [
                         {
                             "attacker_tag": attack.attacker.tag,
@@ -796,32 +812,23 @@ async def on_raid_weekend_end():
 
         # Track capital raid attacks as activity points
         try:
-            # Count attacks per player
-            attack_counts = {}
-            for attack in raid_data.get("attack_log", []):
-                attacker_tag = attack.get("attacker_tag")
-                attacker_name = attack.get("attacker_name")
+            # Use member data for more accurate activity tracking
+            for member in raid_data.get("members", []):
+                member_tag = member.get("tag")
+                member_name = member.get("name")
+                attack_count = member.get("attack_count", 0)
 
-                if attacker_tag:
-                    if attacker_tag not in attack_counts:
-                        attack_counts[attacker_tag] = {
-                            "count": 0,
-                            "name": attacker_name or "Unknown"
-                        }
-                    attack_counts[attacker_tag]["count"] += 1
+                if member_tag and attack_count > 0:
+                    # Track each attack separately for proper activity scoring
+                    for _ in range(attack_count):
+                        activity_tracker.update_activity(
+                            player_tag=member_tag,
+                            player_name=member_name,
+                            activity_type="attack",
+                            metadata={"attack_type": "raid"}
+                        )
 
-            # Update activity tracker for each attacker
-            for attacker_tag, data in attack_counts.items():
-                # Track each attack separately for proper activity scoring
-                for _ in range(data["count"]):
-                    activity_tracker.update_activity(
-                        player_tag=attacker_tag,
-                        player_name=data["name"],
-                        activity_type="attack",
-                        metadata={"attack_type": "raid"}
-                    )
-
-                logger.info(f"Tracked {data['count']} capital raid attacks for {data['name']}")
+                    logger.info(f"Tracked {attack_count} capital raid attacks for {member_name}")
 
         except Exception as e:
             logger.error(f"Error tracking capital raid attacks as activity: {e}")
@@ -829,17 +836,28 @@ async def on_raid_weekend_end():
         # Update state
         event_storage.save_state("capital_raid", {"last_raid": raid_id})
 
-        logger.info(f"Saved capital raid {raid_id}: {raid_data.get('total_capital_loot', 0):,} capital loot")
+        # Calculate total raid medals
+        total_medals = raid_data.get("offensive_reward", 0) + raid_data.get("defensive_reward", 0)
+        member_count = len(raid_data.get("members", []))
+
+        logger.info(
+            f"Saved capital raid {raid_id}: {raid_data.get('total_capital_loot', 0):,} capital gold, "
+            f"{total_medals} raid medals ({member_count} participants)"
+        )
 
         # Log event
         event_logger.log_event(
             "CAPITAL_RAID_END",
             "🏰 Raid Weekend Ended",
-            f"Raid Weekend completed! Earned {raid_data.get('total_capital_loot', 0):,} capital gold",
+            f"Raid Weekend completed! Earned {raid_data.get('total_capital_loot', 0):,} capital gold and {total_medals} raid medals ({member_count} participants)",
             {
                 "raid_id": raid_id,
                 "capital_loot": raid_data.get("total_capital_loot", 0),
                 "raids_completed": raid_data.get("raids_completed", 0),
+                "offensive_reward": raid_data.get("offensive_reward", 0),
+                "defensive_reward": raid_data.get("defensive_reward", 0),
+                "total_medals": total_medals,
+                "participants": member_count,
             }
         )
 
