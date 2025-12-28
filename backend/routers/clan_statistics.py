@@ -125,12 +125,14 @@ async def get_statistics_summary(clan_tag: str):
             # Try to get current clan games session
             import httpx
             async with httpx.AsyncClient() as client:
-                response = await client.get(
+                current_response = await client.get(
                     f"http://localhost:8000/api/clan-games/session/current",
                     timeout=5.0
                 )
-                if response.status_code == 200:
-                    games_data = response.json()
+
+                # Check if there's an active session
+                if current_response.status_code == 200:
+                    games_data = current_response.json()
                     if games_data and games_data.get("session"):
                         session = games_data["session"]
                         # Calculate total points from all players
@@ -145,15 +147,50 @@ async def get_statistics_summary(clan_tag: str):
                             "current_tier": tier_info["current_tier"],
                             "max_tier": tier_info["max_tier"],
                             "current_points": tier_info["current_points"],
+                            "total_points": total_points,
                             "tier_display": f"{tier_info['current_tier']}/{tier_info['max_tier']}",
                             "active": True,
                         }
                     else:
-                        summary["clan_games"] = {
-                            "title": "Clan Games",
-                            "tier_display": "0/6",
-                            "active": False,
-                        }
+                        # No active session - try to get the most recent completed session
+                        history_response = await client.get(
+                            f"http://localhost:8000/api/clan-games/sessions/history",
+                            timeout=5.0
+                        )
+                        if history_response.status_code == 200:
+                            history_data = history_response.json()
+                            sessions = history_data.get("sessions", [])
+                            if sessions:
+                                # Get the most recent completed session
+                                latest_session = sessions[-1]  # Sessions are sorted by start time
+                                # Calculate total points from all players
+                                total_points = sum(
+                                    player.get("points_earned", 0)
+                                    for player in latest_session.get("players", {}).values()
+                                )
+                                tier_info = ResourceCalculator.calculate_clan_games_tier(total_points)
+                                summary["clan_games"] = {
+                                    "title": "Clan Games",
+                                    "current_tier": tier_info["current_tier"],
+                                    "max_tier": tier_info["max_tier"],
+                                    "current_points": tier_info["current_points"],
+                                    "total_points": total_points,
+                                    "tier_display": f"{tier_info['current_tier']}/{tier_info['max_tier']}",
+                                    "active": False,
+                                    "last_session_end": latest_session.get("end_time"),
+                                }
+                            else:
+                                summary["clan_games"] = {
+                                    "title": "Clan Games",
+                                    "tier_display": "0/6",
+                                    "active": False,
+                                }
+                        else:
+                            summary["clan_games"] = {
+                                "title": "Clan Games",
+                                "tier_display": "0/6",
+                                "active": False,
+                            }
                 else:
                     summary["clan_games"] = {
                         "title": "Clan Games",
@@ -286,38 +323,38 @@ async def get_clan_games_history(limit: int = 10):
         List of clan games sessions with tier achieved
     """
     try:
-        # This would need to be implemented with persistent storage of completed sessions
-        # For now, only return completed sessions (not active ones)
         import httpx
         async with httpx.AsyncClient() as client:
+            # Fetch from the actual clan games history endpoint
             response = await client.get(
-                f"http://localhost:8000/api/clan-games/session/current",
+                f"http://localhost:8000/api/clan-games/sessions/history",
                 timeout=5.0
             )
             if response.status_code == 200:
-                games_data = response.json()
-                if games_data and games_data.get("session"):
-                    session = games_data["session"]
-                    # Only include in history if the session is completed (has end_time)
-                    if session.get("end_time") and session.get("status") != "active":
-                        # Calculate total points from all players
-                        total_points = sum(
-                            player.get("points_earned", 0)
-                            for player in session.get("players", {}).values()
-                        )
+                history_data = response.json()
+                sessions = history_data.get("sessions", [])
 
-                        tier_info = ResourceCalculator.calculate_clan_games_tier(total_points)
-                        return {
-                            "items": [{
-                                "start_time": session.get("start_time"),
-                                "end_time": session.get("end_time"),
-                                "total_points": total_points,
-                                "tier_achieved": tier_info["current_tier"],
-                                "max_tier": tier_info["max_tier"],
-                            }]
-                        }
+                # Process each session to calculate tier achieved
+                items = []
+                for session in sessions[-limit:]:  # Get last N sessions
+                    # Calculate total points from all players
+                    total_points = sum(
+                        player.get("points_earned", 0)
+                        for player in session.get("players", {}).values()
+                    )
 
-        # No completed sessions - return empty array
+                    tier_info = ResourceCalculator.calculate_clan_games_tier(total_points)
+                    items.append({
+                        "start_time": session.get("start_time"),
+                        "end_time": session.get("end_time"),
+                        "total_points": total_points,
+                        "tier_achieved": tier_info["current_tier"],
+                        "max_tier": tier_info["max_tier"],
+                    })
+
+                return {"items": items}
+
+        # No history endpoint available - return empty array
         return {"items": []}
 
     except Exception as e:

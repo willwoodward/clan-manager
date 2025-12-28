@@ -64,7 +64,9 @@ export function StatisticsCards({ clanTag }: StatisticsCardsProps) {
       id: 'games' as const,
       title: stats.clan_games?.title || 'Clan Games',
       value: stats.clan_games?.tier_display || '0/6',
-      subtitle: stats.clan_games?.active ? 'Active' : 'Not active',
+      subtitle: stats.clan_games?.active
+        ? 'Active session'
+        : (stats.clan_games?.last_session_end ? 'Previous session' : 'No recent data'),
       icon: Target,
       color: 'text-green-500',
       hoverColor: 'hover:border-green-500',

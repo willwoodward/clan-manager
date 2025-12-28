@@ -8,7 +8,6 @@ import {
 } from '@/components/ui/dialog'
 import { UnifiedLineChart, UnifiedBarChart } from '@/components/ui/chart'
 import { statistics, cwl } from '@/services/api'
-import { format, parseISO } from 'date-fns'
 import {
   Line,
   LineChart,
@@ -18,6 +17,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceLine,
 } from 'recharts'
 import { Target } from 'lucide-react'
 
@@ -122,32 +122,113 @@ export function StatisticsModal({ open, onClose, type, clanTag }: StatisticsModa
     if (type === 'games') {
       // Check if there's any completed clan games history
       if (clanGamesHistory?.items && clanGamesHistory.items.length > 0) {
+        // Clan games tier thresholds
+        const tierThresholds = [3000, 7500, 12000, 18000, 30000, 50000]
+
         const chartData = clanGamesHistory.items
-          .map((item: any) => ({
-            date: item.start_time || 'Current',
+          .map((item: any, index: number) => ({
+            date: item.start_time || `Session ${index + 1}`,
             points: item.total_points,
             tier: item.tier_achieved,
           }))
           .reverse()
 
         return (
-          <UnifiedLineChart
-            data={chartData}
-            dataKey="points"
-            stroke="#10b981"
-            strokeWidth={2}
-            height={300}
-            showDots={true}
-          >
-            <Line
-              type="monotone"
-              dataKey="tier"
-              stroke="#f59e0b"
-              strokeWidth={2}
-              dot={{ fill: '#f59e0b', r: 3 }}
-              name="Tier Achieved"
-            />
-          </UnifiedLineChart>
+          <div style={{ height: 350 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(value) => {
+                    if (!value) return ''
+                    try {
+                      const date = new Date(value)
+                      return `${date.getMonth() + 1}/${date.getDate()}`
+                    } catch {
+                      return value
+                    }
+                  }}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                  domain={[0, 'auto']}
+                />
+                <Tooltip
+                  content={(props) => {
+                    const { active, payload, label } = props
+                    if (!active || !payload || !payload.length) return null
+                    return (
+                      <div
+                        className="bg-background border border-border rounded-lg p-3 shadow-lg"
+                        style={{
+                          backgroundColor: 'hsl(var(--background))',
+                          border: '1px solid hsl(var(--border))',
+                        }}
+                      >
+                        <div className="text-sm font-medium mb-2">
+                          {label ? (() => {
+                            try {
+                              return new Date(label).toLocaleDateString()
+                            } catch {
+                              return label
+                            }
+                          })() : ''}
+                        </div>
+                        <div className="space-y-1">
+                          {payload.map((entry: any, index: number) => (
+                            <div key={index} className="flex items-center gap-2 text-xs">
+                              <div
+                                className="w-3 h-3 rounded"
+                                style={{ backgroundColor: entry.color }}
+                              />
+                              <span className="text-muted-foreground">{entry.name}:</span>
+                              <span className="font-medium">
+                                {entry.name === 'Points'
+                                  ? entry.value.toLocaleString()
+                                  : `Tier ${entry.value}`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+
+                {/* Tier threshold lines */}
+                {tierThresholds.map((threshold, index) => (
+                  <ReferenceLine
+                    key={`tier-${index}`}
+                    y={threshold}
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeWidth={1}
+                    strokeDasharray="5 5"
+                    opacity={0.4}
+                    label={{
+                      value: `Tier ${index + 1}`,
+                      position: 'right',
+                      fill: 'hsl(var(--muted-foreground))',
+                      fontSize: 10,
+                      opacity: 0.7,
+                    }}
+                  />
+                ))}
+
+                {/* Main points line */}
+                <Line
+                  type="monotone"
+                  dataKey="points"
+                  stroke="#10b981"
+                  strokeWidth={3}
+                  dot={{ fill: '#10b981', r: 4 }}
+                  name="Points"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )
       } else {
         // No history yet - show placeholder
