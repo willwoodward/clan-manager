@@ -46,7 +46,10 @@ class PlayerPredictor:
             return
 
         logger.info("Loading war history for predictions...")
+
+        # Load regular wars
         wars = await self.storage.list_wars(limit=1000)
+        regular_attacks = 0
 
         for war_entry in wars:
             war = war_entry["data"]
@@ -88,11 +91,86 @@ class PlayerPredictor:
                 }
 
                 self.player_histories[attacker_tag].append(record)
+                regular_attacks += 1
+
+        logger.info(f"Loaded {len(wars)} regular wars with {regular_attacks} attacks")
+
+        # Load CWL wars
+        cwl_wars = await self.storage.list_cwl_wars(limit=1000)
+        cwl_attacks = 0
+
+        for war_entry in cwl_wars:
+            war = war_entry["data"]
+
+            # CWL wars have a different structure with clan/opponent objects
+            clan_data = war.get("clan", {})
+            opponent_data = war.get("opponent", {})
+
+            # Identify clan members from CWL war (check if this war involves our clan)
+            our_clan_tag = self._normalize_tag(self.clan_tag)
+            clan_tag_in_war = self._normalize_tag(clan_data.get("tag", ""))
+
+            # Determine which side is our clan
+            if clan_tag_in_war == our_clan_tag:
+                our_members = clan_data.get("members", [])
+                opponent_members = opponent_data.get("members", [])
+            else:
+                # This CWL war might not involve our clan, skip it
+                continue
+
+            # Build player lookup (both clan and opponent)
+            players = {}
+
+            # Process our clan members
+            for member in our_members:
+                normalized_tag = self._normalize_tag(member.get("tag", ""))
+                self.clan_members.add(normalized_tag)
+                self.player_names[normalized_tag] = member.get("name", "")
+                players[normalized_tag] = {
+                    "town_hall": member.get("townhallLevel", 0),
+                    "heroes": []  # CWL war data doesn't include hero info
+                }
+
+            # Process opponent members
+            for member in opponent_members:
+                normalized_tag = self._normalize_tag(member.get("tag", ""))
+                players[normalized_tag] = {
+                    "town_hall": member.get("townhallLevel", 0),
+                    "heroes": []  # CWL war data doesn't include hero info
+                }
+
+            # Process attacks from our clan members
+            # In CWL wars, attacks are nested within each member
+            for member in our_members:
+                member_tag = self._normalize_tag(member.get("tag", ""))
+
+                for attack in member.get("attacks", []):
+                    defender_tag = self._normalize_tag(attack.get("defenderTag", ""))
+                    defender = players.get(defender_tag)
+                    attacker = players.get(member_tag)
+
+                    if not attacker or not defender:
+                        continue
+
+                    record = {
+                        "stars": attack.get("stars", 0),
+                        "destruction": attack.get("destructionPercentage", 0),
+                        "attacker_th": attacker["town_hall"],
+                        "defender_th": defender["town_hall"],
+                        "attacker_heroes": attacker.get("heroes", []),
+                        "defender_heroes": defender.get("heroes", []),
+                        "date": war.get("startTime", "")
+                    }
+
+                    self.player_histories[member_tag].append(record)
+                    cwl_attacks += 1
+
+        logger.info(f"Loaded {len(cwl_wars)} CWL wars with {cwl_attacks} attacks")
 
         # Compute TH-level priors
         self._compute_priors()
         self._loaded = True
-        logger.info(f"Loaded {len(self.player_histories)} players, {sum(len(h) for h in self.player_histories.values())} attacks")
+        logger.info(f"Loaded {len(self.player_histories)} players, {sum(len(h) for h in self.player_histories.values())} total attacks")
 
     def _compute_priors(self):
         """Compute TH-level priors from all attacks (destruction-based)."""

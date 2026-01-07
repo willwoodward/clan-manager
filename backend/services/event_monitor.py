@@ -989,18 +989,18 @@ async def check_war_state():
                         try:
                             logger.info(f"CWL war detected - saving CWL data with full attack details")
 
-                            # Import coc_client for converter
-                            from shared.utils.coc_client import coc_client
+                            # Import CoCClient class for static converter method
+                            from shared.utils.coc_client import CoCClient
 
                             # Get current CWL season ID
                             try:
-                                league_group = await coc_client.get_cwl_group(settings.clan_tag)
+                                league_group = await client.get_league_group(settings.clan_tag)
                                 season_id = league_group.season if league_group else datetime.now().strftime("%Y-%m")
                             except:
                                 season_id = datetime.now().strftime("%Y-%m")
 
                             # Convert war to dict with full attack details
-                            war_dict = coc_client.cwl_war_to_dict(war)
+                            war_dict = CoCClient.cwl_war_to_dict(war)
                             if war_dict:
                                 war_data = {
                                     **war_dict,
@@ -1077,8 +1077,8 @@ async def check_war_state():
 
 async def check_cwl_state():
     """Check CWL state and sync data during active CWL."""
-    # Import coc_client for CWL methods
-    from shared.utils.coc_client import coc_client
+    # Import CoCClient class for static converter method
+    from shared.utils.coc_client import CoCClient
 
     last_cwl_check = None
 
@@ -1088,7 +1088,7 @@ async def check_cwl_state():
             now = datetime.now()
 
             # Try to get current CWL group
-            league_group = await coc_client.get_cwl_group(settings.clan_tag)
+            league_group = await client.get_league_group(settings.clan_tag)
 
             if league_group:
                 # CWL is active!
@@ -1096,10 +1096,10 @@ async def check_cwl_state():
                 logger.info(f"CWL is active - Season {season_id}")
 
                 # Convert league group to dict
-                group_data = coc_client.cwl_group_to_dict(league_group)
+                group_data = CoCClient.cwl_group_to_dict(league_group)
 
                 # Get clan info for league tier
-                clan_data = await coc_client.get_clan(settings.clan_tag)
+                clan_data = await client.get_clan(settings.clan_tag)
                 league_name = clan_data.war_league.name if clan_data and clan_data.war_league else "Unranked"
 
                 # Determine current round by checking which rounds have war tags
@@ -1134,12 +1134,12 @@ async def check_cwl_state():
                             war_data = existing_war
                         else:
                             # Fetch new war data
-                            war = await coc_client.get_cwl_war(war_tag)
+                            war = await client.get_league_war(war_tag)
                             if not war:
                                 continue
 
                             # Convert to dict with full attack details
-                            war_dict = coc_client.cwl_war_to_dict(war)
+                            war_dict = CoCClient.cwl_war_to_dict(war)
                             if not war_dict:
                                 continue
 

@@ -245,11 +245,11 @@ export function Members() {
                 </tr>
               </thead>
               <tbody>
-                {sortedMembers.map((member) => (
+                {sortedMembers.map((member, index) => (
                   <tr key={member.tag} className="border-b hover:bg-accent/50 transition-colors">
                     <td className="p-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold">#{member.clanRank}</span>
+                        <span className="font-semibold">#{index + 1}</span>
                         {getRankChange(member)}
                       </div>
                     </td>
