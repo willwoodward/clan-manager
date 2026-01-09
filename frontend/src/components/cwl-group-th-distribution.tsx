@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { BarChart3 } from 'lucide-react'
 import { getTHCounts, getTop15Members, getTop30Members } from '@/data/cwl-distributions'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 interface CWLClanData {
   clanTag: string
@@ -14,9 +14,11 @@ interface CWLGroupTHDistributionProps {
   clans: CWLClanData[]
   ourClanTag: string
   selectedMembers?: Array<{ townHallLevel: number }>
+  onViewChange?: (view: 'group' | 'league') => void
+  showViewToggle?: boolean
 }
 
-export function CWLGroupTHDistribution({ clans, ourClanTag, selectedMembers }: CWLGroupTHDistributionProps) {
+export function CWLGroupTHDistribution({ clans, ourClanTag, selectedMembers, onViewChange, showViewToggle }: CWLGroupTHDistributionProps) {
   const [rosterSize, setRosterSize] = useState<15 | 30>(15)
 
   if (clans.length === 0) {
@@ -38,13 +40,15 @@ export function CWLGroupTHDistribution({ clans, ourClanTag, selectedMembers }: C
     return rosterSize === 30 ? getTop30Members(members) : getTop15Members(members)
   }
 
-  // Get all unique TH levels across all clans
-  const allTHLevels = new Set<number>()
-  clans.forEach(clan => {
-    const topMembers = getTopMembers(clan.members)
-    topMembers.forEach(member => allTHLevels.add(member.townHallLevel))
-  })
-  const sortedTHLevels = Array.from(allTHLevels).sort((a, b) => b - a)
+  // Memoize the calculation of all unique TH levels across all clans
+  const sortedTHLevels = useMemo(() => {
+    const allTHLevels = new Set<number>()
+    clans.forEach(clan => {
+      const topMembers = getTopMembers(clan.members)
+      topMembers.forEach(member => allTHLevels.add(member.townHallLevel))
+    })
+    return Array.from(allTHLevels).sort((a, b) => b - a)
+  }, [clans, rosterSize, selectedMembers])
 
   return (
     <Card>
@@ -77,6 +81,18 @@ export function CWLGroupTHDistribution({ clans, ourClanTag, selectedMembers }: C
             >
               30v30
             </Badge>
+            {showViewToggle && onViewChange && (
+              <>
+                <div className="h-6 w-px bg-border mx-1" />
+                <Badge
+                  variant="outline"
+                  className="cursor-pointer hover:bg-accent"
+                  onClick={() => onViewChange('league')}
+                >
+                  League View
+                </Badge>
+              </>
+            )}
           </div>
         </div>
       </CardHeader>

@@ -94,6 +94,7 @@ export function CWL() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scoringWeights, setScoringWeights] = useState<ScoringWeights>(loadScoringWeights())
   const [selectedLineup, setSelectedLineup] = useState<string[]>(loadLineupSelection())
+  const [chartView, setChartView] = useState<'group' | 'league'>('group')
 
   // Fetch clan data for league info
   const { data: clan, isLoading: clanLoading } = useQuery({
@@ -342,17 +343,21 @@ export function CWL() {
       {/* TH Distribution Comparison */}
       {cwlLoading || (inCWL && loadingCWLClans) ? (
         <ChartSkeleton height="h-96" />
-      ) : inCWL && allCWLClans.length > 0 ? (
+      ) : inCWL && allCWLClans.length > 0 && chartView === 'group' ? (
         <CWLGroupTHDistribution
           clans={allCWLClans}
           ourClanTag={clan?.tag || clanTag}
           selectedMembers={selectedMembers}
+          onViewChange={setChartView}
+          showViewToggle={true}
         />
       ) : leagueInfo && memberStats.length > 0 ? (
         <THDistributionChart
           members={memberStats}
           leagueName={leagueInfo.name}
           selectedMembers={selectedMembers}
+          onViewChange={inCWL && allCWLClans.length > 0 ? setChartView : undefined}
+          showViewToggle={inCWL && allCWLClans.length > 0}
         />
       ) : null}
 

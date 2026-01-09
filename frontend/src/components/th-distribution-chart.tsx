@@ -15,9 +15,11 @@ interface THDistributionChartProps {
   members: Array<{ townHallLevel: number }>
   leagueName?: string
   selectedMembers?: Array<{ townHallLevel: number }>
+  onViewChange?: (view: 'group' | 'league') => void
+  showViewToggle?: boolean
 }
 
-export function THDistributionChart({ members, leagueName: initialLeagueName, selectedMembers }: THDistributionChartProps) {
+export function THDistributionChart({ members, leagueName: initialLeagueName, selectedMembers, onViewChange, showViewToggle }: THDistributionChartProps) {
   const [selectedLeague, setSelectedLeague] = useState(initialLeagueName || 'Crystal II')
   const [hoveredLeague, setHoveredLeague] = useState<string | null>(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -115,28 +117,38 @@ export function THDistributionChart({ members, leagueName: initialLeagueName, se
           </div>
           <div className="flex flex-col items-end gap-1">
             <label className="text-xs font-medium text-muted-foreground">Compare with:</label>
-            <Select
-              value={selectedLeague}
-              onValueChange={setSelectedLeague}
-              open={isOpen}
-              onOpenChange={handleOpenChange}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select league..." />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.keys(LEAGUE_NAMES).map((league) => (
-                  <SelectItem
-                    key={league}
-                    value={league}
-                    onMouseEnter={() => setHoveredLeague(league)}
-                    onMouseLeave={() => setHoveredLeague(null)}
-                  >
-                    {league}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              {showViewToggle && onViewChange && (
+                <button
+                  onClick={() => onViewChange('group')}
+                  className="px-3 py-1.5 text-xs border rounded-md hover:bg-accent transition-colors whitespace-nowrap"
+                >
+                  View CWL Group
+                </button>
+              )}
+              <Select
+                value={selectedLeague}
+                onValueChange={setSelectedLeague}
+                open={isOpen}
+                onOpenChange={handleOpenChange}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Select league..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.keys(LEAGUE_NAMES).map((league) => (
+                    <SelectItem
+                      key={league}
+                      value={league}
+                      onMouseEnter={() => setHoveredLeague(league)}
+                      onMouseLeave={() => setHoveredLeague(null)}
+                    >
+                      {league}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </CardHeader>

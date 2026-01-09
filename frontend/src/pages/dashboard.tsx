@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Users, Trophy, Swords, TrendingUp } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { EventLog } from '@/components/event-log'
+import { ActivityGraph } from '@/components/activity-graph'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
 import { StatisticsCards } from '@/components/statistics-cards'
 
@@ -126,7 +127,7 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={donationData}>
+              <BarChart data={donationData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={12} />
                 <YAxis fontSize={12} />
@@ -145,7 +146,7 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trophyData}>
+              <LineChart data={trophyData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={12} />
                 <YAxis fontSize={12} />
@@ -162,8 +163,11 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent Activity */}
-      <EventLog limit={20} />
+      {/* Activity and Recent Events */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ActivityGraph clanTag={clanTag} days={14} />
+        <EventLog limit={20} />
+      </div>
     </div>
   )
 }
