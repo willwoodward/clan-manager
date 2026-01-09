@@ -1375,7 +1375,7 @@ async def start_event_monitor():
     except coc.InvalidCredentials as error:
         logger.error(f"Invalid CoC API credentials for event monitoring: {error}")
     except Exception as e:
-        logger.error(f"Error starting event monitor: {e}")
+        logger.error(f"Error starting event monitor: {e}", exc_info=True)
 
 
 async def stop_event_monitor():
