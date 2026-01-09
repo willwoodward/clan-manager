@@ -14,9 +14,10 @@ import { useState } from 'react'
 interface THDistributionChartProps {
   members: Array<{ townHallLevel: number }>
   leagueName?: string
+  selectedMembers?: Array<{ townHallLevel: number }>
 }
 
-export function THDistributionChart({ members, leagueName: initialLeagueName }: THDistributionChartProps) {
+export function THDistributionChart({ members, leagueName: initialLeagueName, selectedMembers }: THDistributionChartProps) {
   const [selectedLeague, setSelectedLeague] = useState(initialLeagueName || 'Crystal II')
   const [hoveredLeague, setHoveredLeague] = useState<string | null>(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -31,13 +32,17 @@ export function THDistributionChart({ members, leagueName: initialLeagueName }: 
       setHoveredLeague(null)
     }
   }
+
+  // Use selected members if provided, otherwise use all members
+  const membersToUse = selectedMembers && selectedMembers.length > 0 ? selectedMembers : members
+
   // Get top 15 members for CWL comparison (15v15)
-  const top15 = getTop15Members(members)
+  const top15 = getTop15Members(membersToUse)
   const clanTHCounts = getTHCounts(top15)
   const comparison = compareClanToLeague(clanTHCounts, leagueName)
 
   // Get top 30 members for 30v30 CWL
-  const top30 = getTop30Members(members)
+  const top30 = getTop30Members(membersToUse)
   const top30THCounts = getTHCounts(top30)
   const comparison30v30 = compareClanToLeague30v30(top30THCounts, leagueName)
 
@@ -100,6 +105,9 @@ export function THDistributionChart({ members, leagueName: initialLeagueName }: 
             </CardTitle>
             <CardDescription>
               Compare your top players vs league average for 15v15 and 30v30 CWL
+              {selectedMembers && selectedMembers.length > 0 && (
+                <span className="text-primary"> • Showing selected lineup ({selectedMembers.length})</span>
+              )}
             </CardDescription>
             <div className="text-xs text-muted-foreground mt-2">
               Top 15: {top15.length} • Top 30: {top30.length} members

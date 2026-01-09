@@ -5,6 +5,7 @@
 # Data directory - contains sensitive clan data
 /data/
 /var/clan-data/
+/data-remote/
 
 # Environment files - contain API credentials
 .env

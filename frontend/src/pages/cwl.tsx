@@ -3,14 +3,17 @@ import { clashApi } from '@/services/clash-api'
 import { analytics } from '@/services/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Trophy, Users, Star, Swords, TrendingUp, AlertCircle, CheckCircle, XCircle, Settings } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Trophy, Star, Swords, AlertCircle, CheckCircle, XCircle, Settings } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
 import type { MemberWarStats } from '@/types/cwl'
 import { THDistributionChart } from '@/components/th-distribution-chart'
 import { CWLGroupTHDistribution } from '@/components/cwl-group-th-distribution'
+import { CWLLeagueShowcase } from '@/components/cwl-league-showcase'
 import { PlayerCard } from '@/components/player-card'
 import { ClickablePlayerName } from '@/components/clickable-player-name'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
+import { ChartSkeleton } from '@/components/ui/loading'
 import {
   Dialog,
   DialogContent,
@@ -63,6 +66,22 @@ function saveScoringWeights(weights: ScoringWeights) {
   localStorage.setItem('cwlScoringWeights', JSON.stringify(weights))
 }
 
+// Load/save lineup selection
+function loadLineupSelection(): string[] {
+  const saved = localStorage.getItem('cwlLineupSelection')
+  if (!saved) return []
+
+  try {
+    return JSON.parse(saved)
+  } catch {
+    return []
+  }
+}
+
+function saveLineupSelection(selectedTags: string[]) {
+  localStorage.setItem('cwlLineupSelection', JSON.stringify(selectedTags))
+}
+
 export function CWL() {
   const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
   const [sortField, setSortField] = useState<SortField>('score')
@@ -74,6 +93,7 @@ export function CWL() {
   const [selectedPlayerTag, setSelectedPlayerTag] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scoringWeights, setScoringWeights] = useState<ScoringWeights>(loadScoringWeights())
+  const [selectedLineup, setSelectedLineup] = useState<string[]>(loadLineupSelection())
 
   // Fetch clan data for league info
   const { data: clan, isLoading: clanLoading } = useQuery({
@@ -245,6 +265,42 @@ export function CWL() {
     }
   }
 
+  // Lineup selection handlers
+  const toggleMemberSelection = (playerTag: string) => {
+    const newSelection = selectedLineup.includes(playerTag)
+      ? selectedLineup.filter(tag => tag !== playerTag)
+      : [...selectedLineup, playerTag]
+
+    setSelectedLineup(newSelection)
+    saveLineupSelection(newSelection)
+  }
+
+  const selectTop15 = () => {
+    const top15Tags = sortedMembers.slice(0, 15).map(m => m.tag)
+    setSelectedLineup(top15Tags)
+    saveLineupSelection(top15Tags)
+  }
+
+  const selectTop30 = () => {
+    const top30Tags = sortedMembers.slice(0, 30).map(m => m.tag)
+    setSelectedLineup(top30Tags)
+    saveLineupSelection(top30Tags)
+  }
+
+  const selectAllOptedIn = () => {
+    const optedInTags = memberStats.filter(m => m.warPreference === 'in').map(m => m.tag)
+    setSelectedLineup(optedInTags)
+    saveLineupSelection(optedInTags)
+  }
+
+  const clearSelection = () => {
+    setSelectedLineup([])
+    saveLineupSelection([])
+  }
+
+  // Get selected members for charts
+  const selectedMembers = memberStats.filter(m => selectedLineup.includes(m.tag))
+
   const sortedMembers = [...memberStats].sort((a, b) => {
     const modifier = sortDirection === 'asc' ? 1 : -1
     if (sortField === 'name') {
@@ -269,16 +325,6 @@ export function CWL() {
   const leagueInfo = clan?.warLeague
   const inCWL = cwlGroup !== null && cwlGroup?.state !== 'notInWar'
 
-  // Calculate statistics
-  const totalOptedIn = memberStats.filter(m => m.warPreference === 'in').length
-  const totalOptedOut = memberStats.filter(m => m.warPreference === 'out').length
-  const avgTH = memberStats.length > 0
-    ? (memberStats.reduce((sum, m) => sum + m.townHallLevel, 0) / memberStats.length).toFixed(1)
-    : '0'
-  const avgWarStars = memberStats.length > 0
-    ? (memberStats.reduce((sum, m) => sum + m.warStars, 0) / memberStats.length).toFixed(0)
-    : '0'
-
   return (
     <div className="space-y-6">
       <div>
@@ -286,128 +332,27 @@ export function CWL() {
         <p className="text-muted-foreground">Manage CWL participation and track league medals</p>
       </div>
 
-      {/* Current League Info */}
-      <Card className="border-yellow-500/50">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="h-6 w-6 text-yellow-500" />
-                Current War League
-              </CardTitle>
-              <CardDescription>Your clan's current CWL standing</CardDescription>
-            </div>
-            {inCWL && (
-              <Badge variant="default" className="bg-green-500">
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Active CWL
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-6">
-            {leagueInfo?.iconUrls && (
-              <img
-                src={getProxiedImageUrl(leagueInfo.iconUrls.medium)}
-                alt={leagueInfo.name}
-                className="h-24 w-24"
-              />
-            )}
-            <div className="flex-1">
-              <div className="text-3xl font-bold text-yellow-500">
-                {leagueInfo?.name || 'Unranked'}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Higher leagues = More league medals per war win
-              </p>
-              {inCWL && cwlGroup && (
-                <div className="mt-4 space-y-1">
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">Season:</span>{' '}
-                    <span className="font-medium">{cwlGroup.season}</span>
-                  </div>
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">Status:</span>{' '}
-                    <Badge variant="outline">{cwlGroup.state}</Badge>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Statistics */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              War Preference
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Opted In:</span>
-                <span className="font-bold text-green-500">{totalOptedIn}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Opted Out:</span>
-                <span className="font-bold text-red-500">{totalOptedOut}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Avg Town Hall</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{avgTH}</div>
-            <p className="text-xs text-muted-foreground">Clan average</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Star className="h-4 w-4 text-yellow-500" />
-              Avg War Stars
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-500">{avgWarStars}</div>
-            <p className="text-xs text-muted-foreground">Per member</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              Ready for CWL
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{totalOptedIn}</div>
-            <p className="text-xs text-muted-foreground">Members opted in</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Current League Showcase */}
+      <CWLLeagueShowcase
+        leagueInfo={leagueInfo}
+        cwlGroup={cwlGroup || undefined}
+        inCWL={inCWL}
+      />
 
       {/* TH Distribution Comparison */}
-      {inCWL && allCWLClans.length > 0 ? (
+      {cwlLoading || (inCWL && loadingCWLClans) ? (
+        <ChartSkeleton height="h-96" />
+      ) : inCWL && allCWLClans.length > 0 ? (
         <CWLGroupTHDistribution
           clans={allCWLClans}
           ourClanTag={clan?.tag || clanTag}
+          selectedMembers={selectedMembers}
         />
       ) : leagueInfo && memberStats.length > 0 ? (
         <THDistributionChart
           members={memberStats}
           leagueName={leagueInfo.name}
+          selectedMembers={selectedMembers}
         />
       ) : null}
 
@@ -450,11 +395,45 @@ export function CWL() {
             </p>
           </div>
 
+          {/* Quick Selection Buttons */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">Quick Select:</span>
+            <button
+              onClick={selectTop15}
+              className="px-3 py-1.5 text-xs border rounded-md hover:bg-accent transition-colors"
+            >
+              Top 15
+            </button>
+            <button
+              onClick={selectTop30}
+              className="px-3 py-1.5 text-xs border rounded-md hover:bg-accent transition-colors"
+            >
+              Top 30
+            </button>
+            <button
+              onClick={selectAllOptedIn}
+              className="px-3 py-1.5 text-xs border rounded-md hover:bg-accent transition-colors"
+            >
+              All Opted In ({memberStats.filter(m => m.warPreference === 'in').length})
+            </button>
+            <button
+              onClick={clearSelection}
+              className="px-3 py-1.5 text-xs border border-red-500/50 text-red-500 rounded-md hover:bg-red-500/10 transition-colors"
+            >
+              Clear Selection
+            </button>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-3 font-medium">Status</th>
+                  <th className="text-left p-3 font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>Select</span>
+                      <div className="text-xs text-muted-foreground">({selectedLineup.length})</div>
+                    </div>
+                  </th>
                   <th
                     className="text-left p-3 font-medium cursor-pointer hover:text-primary"
                     onClick={() => handleSort('name')}
@@ -504,20 +483,20 @@ export function CWL() {
               <tbody>
                 {sortedMembers.map((member, index) => {
                   const isRecommended = member.warPreference === 'in' && member.score > 500
+                  const isSelected = selectedLineup.includes(member.tag)
 
                   return (
                     <tr
                       key={member.tag}
                       className={`border-b hover:bg-accent/50 transition-colors ${
-                        isRecommended ? 'bg-green-500/5' : ''
+                        isSelected ? 'bg-primary/5' : isRecommended ? 'bg-green-500/5' : ''
                       }`}
                     >
                       <td className="p-3">
-                        {member.warPreference === 'in' ? (
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-500" />
-                        )}
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleMemberSelection(member.tag)}
+                        />
                       </td>
                       <td className="p-3">
                         <div className="flex flex-col gap-1">

@@ -13,9 +13,10 @@ interface CWLClanData {
 interface CWLGroupTHDistributionProps {
   clans: CWLClanData[]
   ourClanTag: string
+  selectedMembers?: Array<{ townHallLevel: number }>
 }
 
-export function CWLGroupTHDistribution({ clans, ourClanTag }: CWLGroupTHDistributionProps) {
+export function CWLGroupTHDistribution({ clans, ourClanTag, selectedMembers }: CWLGroupTHDistributionProps) {
   const [rosterSize, setRosterSize] = useState<15 | 30>(15)
 
   if (clans.length === 0) {
@@ -56,6 +57,9 @@ export function CWLGroupTHDistribution({ clans, ourClanTag }: CWLGroupTHDistribu
             </CardTitle>
             <CardDescription>
               Compare Town Hall distribution across all clans in your CWL group
+              {selectedMembers && selectedMembers.length > 0 && (
+                <span className="text-primary"> • Showing your selected lineup ({selectedMembers.length})</span>
+              )}
             </CardDescription>
           </div>
           <div className="flex gap-2">
@@ -81,7 +85,11 @@ export function CWLGroupTHDistribution({ clans, ourClanTag }: CWLGroupTHDistribu
           <div className="flex items-stretch justify-center gap-4 h-[500px] min-w-max px-4">
             {clans.map((clan) => {
               const isOurClan = clan.clanTag === ourClanTag
-              const topMembers = getTopMembers(clan.members)
+              // Use selected members if it's our clan and we have a selection
+              const membersToUse = isOurClan && selectedMembers && selectedMembers.length > 0
+                ? selectedMembers
+                : clan.members
+              const topMembers = getTopMembers(membersToUse)
               const thCounts = getTHCounts(topMembers)
 
               return (

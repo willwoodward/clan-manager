@@ -563,7 +563,7 @@ class CoCClient:
             }
 
         result = {
-            "state": war.state,
+            "state": war.state.value if hasattr(war.state, 'value') else str(war.state),
             "warTag": war.war_tag,
             "startTime": war.start_time.time.isoformat() if hasattr(war, 'start_time') and war.start_time else None,
             "endTime": war.end_time.time.isoformat() if hasattr(war, 'end_time') and war.end_time else None,
@@ -578,7 +578,7 @@ class CoCClient:
                     "large": str(war.clan.badge.large) if war.clan.badge else None,
                 } if hasattr(war.clan, 'badge') and war.clan.badge else None,
                 "clanLevel": war.clan.level,
-                "attacks": war.clan.attacks if hasattr(war.clan, 'attacks') else 0,
+                "attacks": len(war.clan.attacks) if hasattr(war.clan, 'attacks') and isinstance(war.clan.attacks, list) else (war.clan.attacks if hasattr(war.clan, 'attacks') else 0),
                 "stars": war.clan.stars,
                 "destructionPercentage": war.clan.destruction,
                 "members": [
@@ -595,7 +595,7 @@ class CoCClient:
                     "large": str(war.opponent.badge.large) if war.opponent.badge else None,
                 } if hasattr(war.opponent, 'badge') and war.opponent.badge else None,
                 "clanLevel": war.opponent.level,
-                "attacks": war.opponent.attacks if hasattr(war.opponent, 'attacks') else 0,
+                "attacks": len(war.opponent.attacks) if hasattr(war.opponent, 'attacks') and isinstance(war.opponent.attacks, list) else (war.opponent.attacks if hasattr(war.opponent, 'attacks') else 0),
                 "stars": war.opponent.stars,
                 "destructionPercentage": war.opponent.destruction,
                 "members": [
