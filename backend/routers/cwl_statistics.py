@@ -25,7 +25,7 @@ storage_manager = StorageManager(
 )
 
 
-@router.get("/cwl/history")
+@router.get("/history")
 async def get_cwl_history(limit: int = 12):
     """
     Get historical CWL seasons.
@@ -67,7 +67,7 @@ async def get_cwl_history(limit: int = 12):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/cwl/season/{season_id}")
+@router.get("/season/{season_id}")
 async def get_cwl_season_details(season_id: str):
     """
     Get detailed stats for a specific CWL season.
@@ -122,7 +122,7 @@ async def get_cwl_season_details(season_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/cwl/war/{war_tag}")
+@router.get("/war/{war_tag}")
 async def get_cwl_war_details(war_tag: str):
     """
     Get detailed stats for a specific CWL war including all attacks.
@@ -148,7 +148,7 @@ async def get_cwl_war_details(war_tag: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/cwl/current")
+@router.get("/current")
 async def get_current_cwl_season():
     """
     Get the current/most recent CWL season.

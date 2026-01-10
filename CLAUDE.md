@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL: Git Commit Policy
+
+**NEVER commit or push code without explicit user permission.**
+
+- Do NOT use `git commit` or `git push` unless the user specifically asks you to
+- Do NOT proactively commit "fixes" or "improvements"
+- Always ask the user first: "Would you like me to commit these changes?"
+- The user may want to review changes before committing
+- The user controls when code is committed and pushed to remote
+
+If you accidentally commit without permission:
+1. Immediately stop and apologize
+2. Ask the user how they want to proceed (keep it, revert it, amend it, etc.)
+3. Do NOT try to "fix" it by reverting without asking
+
 ## Project Overview
 
 This is a full-stack Clash of Clans clan management platform featuring real-time analytics, war predictions, clan games tracking, and player performance monitoring.
@@ -407,12 +422,53 @@ See `docs/deployment-strategy.md` for detailed deployment guide.
 - Cache automatically invalidated on event updates
 - Optional dependency - backend works without Redis
 
+## Known Issues
+
+### CoC API Key Conflicts (Local + Production)
+
+**Issue:** Both local development and production servers share the same CoC developer account credentials but have different IP addresses. When one server restarts and manages its API keys, it can invalidate the other server's keys, causing 403 Forbidden errors.
+
+**Symptoms:**
+- Event monitor logs show: `coc.errors.Forbidden: accessDenied (status code: 403): Invalid authorization`
+- Activity tracking stops working
+- Continuous "Ignoring exception in event task" errors
+
+**Immediate Fix:**
+```bash
+# Restart the affected server to recreate API keys
+ssh root@<SERVER_IP> "cd /opt/clan-manager && docker compose -f docker-compose.prod.yml restart backend"
+```
+
+**Long-term Solutions:**
+
+1. **Separate Developer Accounts (Recommended)**
+   - Create a second CoC developer account for local development
+   - Update local `.env` with different `COC_EMAIL` and `COC_PASSWORD`
+   - Each environment maintains its own API keys independently
+
+2. **Shared Key Management**
+   - Modify coc.py client to avoid deleting keys from other IPs
+   - Both servers can coexist with keys for both IP addresses
+   - Requires custom key management logic
+
+3. **Single Environment Development**
+   - Only run local OR production at any given time
+   - Coordinate restarts to avoid conflicts
+   - Not ideal for active development
+
+**Best Practice:** Use separate CoC developer accounts for local and production environments to avoid any interference.
+
 ## Troubleshooting
 
 **Backend won't start:**
 - Check CoC API credentials in `.env`
 - Ensure `data/` directory exists and is writable
 - Check Redis connectivity if using cache
+
+**Event monitor showing 403 Forbidden errors:**
+- See "CoC API Key Conflicts" in Known Issues section above
+- Restart the backend to recreate API keys
+- Consider using separate developer accounts for local/production
 
 **Predictions not including CWL data:**
 - Restart backend to reload war data
