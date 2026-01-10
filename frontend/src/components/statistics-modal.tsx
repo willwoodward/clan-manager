@@ -506,7 +506,8 @@ export function StatisticsModal({ open, onClose, type, clanTag }: StatisticsModa
                         />
                       )
                     }
-                    return null
+                    // Return invisible circle instead of null to satisfy TypeScript
+                    return <circle cx={props.cx} cy={props.cy} r={0} fill="transparent" />
                   }}
                   name="Projected"
                   connectNulls={false}
