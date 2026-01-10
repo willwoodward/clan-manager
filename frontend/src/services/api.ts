@@ -412,7 +412,7 @@ export const statistics = {
  * CWL (Clan War League) API endpoints
  */
 const cwlApi = axios.create({
-  baseURL: `${API_BASE_URL}/cwl`,
+  baseURL: `${API_BASE_URL}/api/cwl`,
   timeout: 10000,
 })
 
