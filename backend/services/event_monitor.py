@@ -150,6 +150,7 @@ async def save_war_data(war):
         war_data = {
             "state": str(war.state),
             "team_size": war.team_size,
+            "attacks_per_member": getattr(war, 'attacks_per_member', 2),  # CWL = 1, Regular = 2
             "clan_tag": war.clan.tag,
             "clan_name": war.clan.name,
             "clan_level": war.clan.level,

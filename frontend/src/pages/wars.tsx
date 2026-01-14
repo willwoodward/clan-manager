@@ -2,14 +2,15 @@ import { useQuery } from '@tanstack/react-query'
 import { clashApi, analytics } from '@/services/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Swords, Trophy, Target, TrendingUp, AlertCircle, Users, CheckCircle, XCircle } from 'lucide-react'
+import { Swords, Star, Target, AlertCircle, Users, CheckCircle, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { WarMatchupPredictions } from '@/components/war-matchup-predictions'
-import { WarStrategy } from '@/components/war-strategy'
-import { PlayerStats } from '@/components/player-stats'
 import { WarNetworkGraph } from '@/components/war-network-graph'
 import { ClickablePlayerName } from '@/components/clickable-player-name'
 import { PlayerCard } from '@/components/player-card'
+import { WarStatisticsCards } from '@/components/war-statistics-cards'
+import { WarDetailModal } from '@/components/war-detail-modal'
+import { ClanWarFlipCard } from '@/components/clan-war-flip-card'
 
 type MemberSortField = 'name' | 'attacks' | 'townhallLevel'
 type SortDirection = 'asc' | 'desc'
@@ -19,6 +20,7 @@ export function Wars() {
   const [memberSortField, setMemberSortField] = useState<MemberSortField>('attacks')
   const [memberSortDirection, setMemberSortDirection] = useState<SortDirection>('asc')
   const [selectedPlayerTag, setSelectedPlayerTag] = useState<string | null>(null)
+  const [selectedWar, setSelectedWar] = useState<any>(null)
 
   // Fetch current war
   const { data: currentWar, isLoading: warLoading, error: warError } = useQuery({
@@ -86,59 +88,6 @@ export function Wars() {
   // Calculate war statistics from war history (stored war data)
   const wars = warHistory?.wars?.map((w: any) => ({ ...w.data, _id: w.id })) || []
 
-  // Debug logging
-  if (wars.length > 0) {
-    console.log('War History:', wars.map((w: any) => ({
-      id: w._id,
-      opponent: w.opponent_name,
-      date: w.end_time
-    })))
-  }
-
-  const warStats = wars.length > 0 ? {
-    total: wars.length,
-    wins: wars.filter((w: any) => {
-      const clanStars = w.clan_stars || 0
-      const oppStars = w.opponent_stars || 0
-      const clanDest = w.clan_destruction || 0
-      const oppDest = w.opponent_destruction || 0
-      return clanStars > oppStars || (clanStars === oppStars && clanDest > oppDest)
-    }).length,
-    losses: wars.filter((w: any) => {
-      const clanStars = w.clan_stars || 0
-      const oppStars = w.opponent_stars || 0
-      const clanDest = w.clan_destruction || 0
-      const oppDest = w.opponent_destruction || 0
-      return clanStars < oppStars || (clanStars === oppStars && clanDest < oppDest)
-    }).length,
-    avgStars: wars.reduce((acc: number, w: any) => acc + (w.clan_stars || 0), 0) / wars.length || 0,
-  } : { total: 0, wins: 0, losses: 0, avgStars: 0 }
-
-  const winRate = warStats.total > 0 ? ((warStats.wins / warStats.total) * 100).toFixed(1) : '0.0'
-
-  // Calculate current streak from most recent wars
-  const calculateStreak = () => {
-    if (wars.length === 0) return 0
-    let streak = 0
-
-    for (const war of wars) {
-      const clanStars = war.clan_stars || 0
-      const oppStars = war.opponent_stars || 0
-      const clanDest = war.clan_destruction || 0
-      const oppDest = war.opponent_destruction || 0
-      const isWin = clanStars > oppStars || (clanStars === oppStars && clanDest > oppDest)
-
-      if (isWin) {
-        streak++
-      } else {
-        break
-      }
-    }
-    return streak
-  }
-
-  const currentStreak = calculateStreak()
-
   const notInWar = !currentWar || currentWar.state === 'notInWar' || warError
 
   // Member attack statistics (from current war)
@@ -202,7 +151,7 @@ export function Wars() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-primary">
+        <Card className="border-primary/50 bg-gradient-to-br from-primary/5 to-primary/10 overflow-hidden relative">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -216,36 +165,17 @@ export function Wars() {
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-6">
-              {/* Our Clan */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-lg flex items-center gap-2">
-                  <Swords className="h-5 w-5 text-primary" />
-                  {currentWar.clan.name}
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Stars:</span>
-                    <span className="font-bold text-yellow-500 flex items-center gap-1">
-                      <Trophy className="h-4 w-4" />
-                      {currentWar.clan.stars}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Destruction:</span>
-                    <span className="font-bold">{currentWar.clan.destructionPercentage?.toFixed(2)}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Attacks:</span>
-                    <span className="font-bold">
-                      {currentWar.clan.attacks}/{currentWar.teamSize * 2}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              {/* Our Clan - Flip Card */}
+              <ClanWarFlipCard
+                clan={currentWar.clan}
+                teamSize={currentWar.teamSize}
+                side="our"
+                currentWar={currentWar}
+              />
 
               {/* VS */}
               <div className="flex items-center justify-center">
-                <div className="text-center">
+                <div className="bg-background/60 backdrop-blur-sm rounded-lg p-6 border border-border/50 transition-all duration-200 hover:scale-105 text-center">
                   <div className="text-4xl font-bold text-primary mb-2">VS</div>
                   <div className={`text-2xl font-bold ${
                     currentWar.clan.stars > currentWar.opponent.stars
@@ -263,44 +193,16 @@ export function Wars() {
                 </div>
               </div>
 
-              {/* Opponent */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-lg flex items-center gap-2">
-                  <Target className="h-5 w-5 text-destructive" />
-                  {currentWar.opponent.name}
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Stars:</span>
-                    <span className="font-bold text-yellow-500 flex items-center gap-1">
-                      <Trophy className="h-4 w-4" />
-                      {currentWar.opponent.stars}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Destruction:</span>
-                    <span className="font-bold">{currentWar.opponent.destructionPercentage?.toFixed(2)}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Attacks:</span>
-                    <span className="font-bold">
-                      {currentWar.opponent.attacks}/{currentWar.teamSize * 2}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              {/* Opponent - Flip Card */}
+              <ClanWarFlipCard
+                clan={currentWar.opponent}
+                teamSize={currentWar.teamSize}
+                side="opponent"
+                currentWar={currentWar}
+              />
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* War Strategy Optimizer */}
-      {!notInWar && currentWar.clan?.members && currentWar.opponent?.members && (
-        <WarStrategy
-          clanMembers={currentWar.clan.members}
-          opponentMembers={currentWar.opponent.members}
-          attacksPerMember={currentWar.attacksPerMember || 2}
-        />
       )}
 
       {/* War Network Graph - Combined visualization */}
@@ -444,47 +346,7 @@ export function Wars() {
       )}
 
       {/* War Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Wars</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{warStats.total}</div>
-            <p className="text-xs text-muted-foreground">All time</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-500" />
-              Win Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">{winRate}%</div>
-            <p className="text-xs text-muted-foreground">{warStats.wins} wins, {warStats.losses} losses</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Current Streak</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{currentStreak}</div>
-            <p className="text-xs text-muted-foreground">Consecutive wins</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Avg Stars</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-500">{warStats.avgStars.toFixed(1)}</div>
-            <p className="text-xs text-muted-foreground">Per war</p>
-          </CardContent>
-        </Card>
-      </div>
+      <WarStatisticsCards />
 
       {/* War History */}
       {wars.length > 0 && (
@@ -492,7 +354,7 @@ export function Wars() {
           <CardHeader>
             <CardTitle>Recent Wars</CardTitle>
             <CardDescription>
-              Saved war history with detailed attack data ({wars.length} wars total)
+              Click on any war to see detailed statistics ({wars.length} wars total)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -510,7 +372,8 @@ export function Wars() {
                 return (
                   <div
                     key={war._id || war.opponent_name}
-                    className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/50 transition-colors"
+                    className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer"
+                    onClick={() => setSelectedWar(war)}
                   >
                     <div className="flex items-center gap-4 flex-1">
                       <div className="text-sm text-muted-foreground min-w-[100px]">
@@ -527,7 +390,7 @@ export function Wars() {
                       {getResultBadge(result)}
                       <div className="text-right min-w-[120px]">
                         <div className="flex items-center gap-2 justify-end">
-                          <Trophy className="h-4 w-4 text-yellow-500" />
+                          <Star className="h-4 w-4 text-yellow-500" />
                           <span className="font-bold">{clanStars}</span>
                           <span className="text-muted-foreground">-</span>
                           <span className="font-bold">{oppStars}</span>
@@ -553,13 +416,16 @@ export function Wars() {
         </Card>
       )}
 
-      {/* Player Performance Stats */}
-      <PlayerStats />
-
       <PlayerCard
         playerTag={selectedPlayerTag}
         open={!!selectedPlayerTag}
         onClose={() => setSelectedPlayerTag(null)}
+      />
+
+      <WarDetailModal
+        war={selectedWar}
+        open={!!selectedWar}
+        onClose={() => setSelectedWar(null)}
       />
     </div>
   )

@@ -4,13 +4,13 @@
  * Interactive visualization showing clan members and opponents with attack connections
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { analytics } from '@/services/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Swords, Target, Trophy, TrendingUp, Info, Lightbulb, Loader2 } from 'lucide-react'
+import { Swords, Target, Info, Lightbulb, Loader2 } from 'lucide-react'
 
 interface Member {
   tag: string
@@ -48,6 +48,18 @@ export function WarNetworkGraph({
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null)
   const [showPredictions, setShowPredictions] = useState(false)
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   // Fetch war strategy predictions (for "Show Predictions" button)
   const { data: strategy, isLoading: strategyLoading } = useQuery({
@@ -102,16 +114,23 @@ export function WarNetworkGraph({
     enabled: !!selectedPlayer,
   })
 
-  const width = 1000
-  const height = 600
+  // Responsive dimensions
+  const width = isMobile ? 450 : 1000
   const nodeRadius = 25
-  const leftX = 100
-  const rightX = width - 100
+  const minSpacing = 60 // Minimum spacing between nodes
+  const topPadding = 60
+  const bottomPadding = 40
+  const leftX = isMobile ? 60 : 100
+  const rightX = width - (isMobile ? 60 : 100)
+
+  // Calculate dynamic height based on member count
+  const maxMembers = Math.max(clanMembers.length, opponentMembers.length)
+  const height = Math.max(600, maxMembers * minSpacing + topPadding + bottomPadding)
 
   // Calculate node positions
   const clanNodes = useMemo(() => {
-    const spacing = Math.min(height / (clanMembers.length + 1), 80)
-    const startY = (height - (clanMembers.length - 1) * spacing) / 2
+    const spacing = Math.max(minSpacing, (height - topPadding - bottomPadding) / (clanMembers.length + 1))
+    const startY = topPadding + spacing
 
     return clanMembers.map((member, i) => ({
       x: leftX,
@@ -119,11 +138,11 @@ export function WarNetworkGraph({
       member,
       side: 'clan' as const
     }))
-  }, [clanMembers, height])
+  }, [clanMembers, height, topPadding, bottomPadding, minSpacing, leftX])
 
   const opponentNodes = useMemo(() => {
-    const spacing = Math.min(height / (opponentMembers.length + 1), 80)
-    const startY = (height - (opponentMembers.length - 1) * spacing) / 2
+    const spacing = Math.max(minSpacing, (height - topPadding - bottomPadding) / (opponentMembers.length + 1))
+    const startY = topPadding + spacing
 
     return opponentMembers.map((member, i) => ({
       x: rightX,
@@ -131,7 +150,7 @@ export function WarNetworkGraph({
       member,
       side: 'opponent' as const
     }))
-  }, [opponentMembers, height])
+  }, [opponentMembers, height, topPadding, bottomPadding, minSpacing, rightX])
 
   // Build attack connections (actual + predictions)
   const edges = useMemo(() => {
@@ -228,24 +247,6 @@ export function WarNetworkGraph({
       return a.order - b.order
     })
   }, [clanNodes, opponentNodes, showPredictions, strategy, selectedPlayer, playerPredictions])
-
-  // Calculate stats
-  const stats = useMemo(() => {
-    const clanAttacksUsed = clanMembers.reduce((sum, m) => sum + (m.attacks?.length || 0), 0)
-    const totalPossibleAttacks = clanMembers.length * attacksPerMember
-    const totalStars = edges.reduce((sum, e) => sum + e.stars, 0)
-    const avgDestruction = edges.length > 0
-      ? edges.reduce((sum, e) => sum + e.destruction, 0) / edges.length
-      : 0
-
-    return {
-      attacksUsed: clanAttacksUsed,
-      totalAttacks: totalPossibleAttacks,
-      totalStars,
-      avgDestruction,
-      participation: (clanAttacksUsed / totalPossibleAttacks) * 100
-    }
-  }, [clanMembers, edges, attacksPerMember])
 
   // Check if node or edge should be highlighted/dimmed
   const isNodeHighlighted = (nodeTag: string) => {
@@ -352,51 +353,31 @@ export function WarNetworkGraph({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Stats Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-accent/50 rounded-lg">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-primary">{stats.attacksUsed}/{stats.totalAttacks}</div>
-            <div className="text-xs text-muted-foreground">Attacks Used</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-500">{stats.totalStars}</div>
-            <div className="text-xs text-muted-foreground">Total Stars</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-500">{stats.avgDestruction.toFixed(1)}%</div>
-            <div className="text-xs text-muted-foreground">Avg Destruction</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-blue-500">{stats.participation.toFixed(0)}%</div>
-            <div className="text-xs text-muted-foreground">Participation</div>
-          </div>
-        </div>
-
         {/* Legend */}
-        <div className="flex flex-wrap gap-4 text-xs p-3 bg-muted/50 rounded-lg">
-          <div className="flex items-center gap-2">
-            <Info className="h-4 w-4" />
+        <div className="flex flex-wrap gap-2 md:gap-4 text-xs p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <Info className="h-4 w-4 flex-shrink-0" />
             <span className="font-medium">Hover to highlight | Click clan members to see predictions</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-green-500" />
+            <div className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0" />
             <span>3 Stars</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-yellow-500" />
+            <div className="w-3 h-3 rounded-full bg-yellow-500 flex-shrink-0" />
             <span>2 Stars</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-orange-500" />
+            <div className="w-3 h-3 rounded-full bg-orange-500 flex-shrink-0" />
             <span>1 Star</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
+            <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0" />
             <span>0 Stars</span>
           </div>
           {showPredictions && !selectedPlayer && (
             <div className="flex items-center gap-1">
-              <svg width="20" height="12" className="inline">
+              <svg width="20" height="12" className="inline flex-shrink-0">
                 <line x1="0" y1="6" x2="20" y2="6" stroke="currentColor" strokeWidth="2" strokeDasharray="5,5" />
               </svg>
               <span>Strategy Predictions</span>
@@ -405,13 +386,13 @@ export function WarNetworkGraph({
           {selectedPlayer && (
             <>
               <div className="flex items-center gap-1">
-                <svg width="20" height="12" className="inline">
+                <svg width="20" height="12" className="inline flex-shrink-0">
                   <line x1="0" y1="6" x2="20" y2="6" stroke="#9ca3af" strokeWidth="2" strokeDasharray="5,5" />
                 </svg>
                 <span>Player Predictions</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full border-2 border-blue-500" />
+                <div className="w-3 h-3 rounded-full border-2 border-blue-500 flex-shrink-0" />
                 <span>Selected Player</span>
               </div>
             </>
@@ -419,12 +400,14 @@ export function WarNetworkGraph({
         </div>
 
         {/* SVG Graph */}
-        <div className="relative w-full">
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            className="border rounded-lg bg-background w-full px-48"
-            preserveAspectRatio="xMidYMid meet"
-          >
+        <div className="relative w-full overflow-x-auto">
+          <div className="min-w-[400px] md:min-w-0">
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              className="border rounded-lg bg-background w-full"
+              preserveAspectRatio="xMidYMid meet"
+              style={{ maxHeight: '800px' }}
+            >
             {/* Draw edges */}
             {edges.map((edge, i) => {
               const edgeId = `${edge.from.member.tag}->${edge.to.member.tag}`
@@ -584,10 +567,10 @@ export function WarNetworkGraph({
                     x={node.x - nodeRadius - 5}
                     y={node.y + 5}
                     textAnchor="end"
-                    className="text-sm fill-current pointer-events-none"
+                    className="text-xs md:text-sm fill-current pointer-events-none"
                     opacity={opacity}
                   >
-                    {node.member.name.length > 15 ? node.member.name.substring(0, 12) + '...' : node.member.name}
+                    {node.member.name.length > 12 ? node.member.name.substring(0, 10) + '...' : node.member.name}
                   </text>
 
                   {/* Tooltip */}
@@ -684,10 +667,10 @@ export function WarNetworkGraph({
                     x={node.x + nodeRadius + 5}
                     y={node.y + 5}
                     textAnchor="start"
-                    className="text-sm fill-current pointer-events-none"
+                    className="text-xs md:text-sm fill-current pointer-events-none"
                     opacity={opacity}
                   >
-                    {node.member.name.length > 15 ? node.member.name.substring(0, 12) + '...' : node.member.name}
+                    {node.member.name.length > 12 ? node.member.name.substring(0, 10) + '...' : node.member.name}
                   </text>
 
                   {/* Tooltip */}
@@ -727,21 +710,22 @@ export function WarNetworkGraph({
             {/* Side labels */}
             <text
               x={leftX}
-              y={30}
+              y={35}
               textAnchor="middle"
-              className="text-lg font-bold fill-primary"
+              className="text-base md:text-lg font-bold fill-primary"
             >
               Our Clan
             </text>
             <text
               x={rightX}
-              y={30}
+              y={35}
               textAnchor="middle"
-              className="text-lg font-bold fill-destructive"
+              className="text-base md:text-lg font-bold fill-destructive"
             >
               Opponents
             </text>
           </svg>
+          </div>
         </div>
 
         {/* Helper text */}
