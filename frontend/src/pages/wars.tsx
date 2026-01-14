@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { clashApi, analytics } from '@/services/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Swords, Star, Target, AlertCircle, Users, CheckCircle, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { WarMatchupPredictions } from '@/components/war-matchup-predictions'
@@ -11,6 +12,7 @@ import { PlayerCard } from '@/components/player-card'
 import { WarStatisticsCards } from '@/components/war-statistics-cards'
 import { WarDetailModal } from '@/components/war-detail-modal'
 import { ClanWarFlipCard } from '@/components/clan-war-flip-card'
+import { LineupOptimizerModal } from '@/components/lineup-optimizer-modal'
 
 type MemberSortField = 'name' | 'attacks' | 'townhallLevel'
 type SortDirection = 'asc' | 'desc'
@@ -21,6 +23,7 @@ export function Wars() {
   const [memberSortDirection, setMemberSortDirection] = useState<SortDirection>('asc')
   const [selectedPlayerTag, setSelectedPlayerTag] = useState<string | null>(null)
   const [selectedWar, setSelectedWar] = useState<any>(null)
+  const [lineupOptimizerOpen, setLineupOptimizerOpen] = useState(false)
 
   // Fetch current war
   const { data: currentWar, isLoading: warLoading, error: warError } = useQuery({
@@ -134,9 +137,19 @@ export function Wars() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Clan Wars</h1>
-        <p className="text-muted-foreground">Track your clan's war performance</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Clan Wars</h1>
+          <p className="text-muted-foreground">Track your clan's war performance</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setLineupOptimizerOpen(true)}
+          className="flex items-center gap-2"
+        >
+          <Users className="h-4 w-4" />
+          Plan Lineup
+        </Button>
       </div>
 
       {/* Current War */}
@@ -426,6 +439,11 @@ export function Wars() {
         war={selectedWar}
         open={!!selectedWar}
         onClose={() => setSelectedWar(null)}
+      />
+
+      <LineupOptimizerModal
+        open={lineupOptimizerOpen}
+        onClose={() => setLineupOptimizerOpen(false)}
       />
     </div>
   )

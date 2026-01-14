@@ -386,10 +386,10 @@ See `docs/deployment-strategy.md` for detailed deployment guide.
 ## Key Files to Understand
 
 **Backend:**
-- `backend/services/event_monitor.py` (1398 lines) - Core event-driven data collection
-- `backend/services/predictor.py` (515 lines) - War prediction ML model
-- `shared/utils/storage.py` (660 lines) - Storage abstraction layer
-- `shared/utils/coc_client.py` (608 lines) - CoC API client wrapper
+- `backend/services/event_monitor.py` (~1400 lines) - Core event-driven data collection
+- `backend/services/predictor.py` (~650 lines) - War prediction ML model + lineup optimization
+- `shared/utils/storage.py` (~660 lines) - Storage abstraction layer
+- `shared/utils/coc_client.py` (~610 lines) - CoC API client wrapper
 
 **Frontend:**
 - `frontend/src/App.tsx` - React Router setup, navigation structure
@@ -421,6 +421,15 @@ See `docs/deployment-strategy.md` for detailed deployment guide.
 - TTL controlled by `CACHE_TTL` env var (default 3600s)
 - Cache automatically invalidated on event updates
 - Optional dependency - backend works without Redis
+
+### War Lineup Optimizer
+- **Endpoint**: `POST /api/analytics/lineup/optimize`
+- **Frontend**: Modal on Wars page ("Plan Lineup" button)
+- **Algorithm**: Uses Bayesian predictions (same as individual predictions) with CI-based risk tolerance
+- **Key method**: `predictor.get_lineup_strength_scores(player_tags, risk_tolerance)`
+- **Scoring formula**: `0.7*effective_destruction + 0.2*overall_3star_rate + 0.1*consistency`
+- **Risk tolerance**: 0=pessimistic (uses lower CI), 1=optimistic (uses expected value)
+- **Files**: `backend/routers/analytics.py` (endpoint), `backend/services/predictor.py` (scoring), `frontend/src/components/lineup-optimizer-modal.tsx` (UI)
 
 ## Known Issues
 
@@ -484,6 +493,11 @@ ssh root@<SERVER_IP> "cd /opt/clan-manager && docker compose -f docker-compose.p
 - Verify `VITE_API_URL` is set correctly
 - Check CORS settings in backend `.env`
 - Ensure backend is running and accessible
+
+**Docker build fails with "package.json and package-lock.json out of sync":**
+- Happens when package.json is edited but lock file not updated
+- Docker may have created node_modules with root ownership, blocking local npm
+- Fix: `docker run --rm -v $(pwd)/frontend:/app -w /app node:20 npm install`
 
 ## Documentation
 

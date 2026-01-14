@@ -513,3 +513,163 @@ class PlayerPredictor:
                 for th, prior in sorted(self.th_priors.items())
             }
         }
+
+    async def get_lineup_strength_scores(
+        self,
+        player_tags: List[str],
+        risk_tolerance: float = 0.5
+    ) -> List[Dict]:
+        """Calculate lineup strength scores for a list of players.
+
+        Uses Bayesian predictions to evaluate each player's war potential.
+        The scoring uses the same prediction model as individual predictions,
+        ensuring consistency. The risk_tolerance parameter controls how
+        optimistic/pessimistic the scoring is via confidence intervals.
+
+        Args:
+            player_tags: List of player tags to evaluate
+            risk_tolerance: 0.0 = use lower CI bound (pessimistic/Perfect War)
+                           1.0 = use expected value (optimistic/Max Participation)
+
+        Returns:
+            List of player scores with breakdown, sorted by strength_score descending
+        """
+        await self._load_war_data()
+
+        results = []
+
+        for tag in player_tags:
+            normalized_tag = self._normalize_tag(tag)
+            attacks = self.player_histories.get(normalized_tag, [])
+            player_name = self.player_names.get(normalized_tag, tag)
+
+            # Get current TH level (from most recent attack or API)
+            if attacks:
+                current_th = attacks[-1]["attacker_th"]
+            else:
+                # Try to fetch from API if no attack history
+                if self.coc_client:
+                    try:
+                        player_data = await self.coc_client.get_player(tag)
+                        if player_data:
+                            current_th = player_data.get("townHallLevel", 0)
+                            player_name = player_data.get("name", player_name)
+                        else:
+                            current_th = 0
+                    except Exception:
+                        current_th = 0
+                else:
+                    current_th = 0
+
+            # Calculate metrics from attack history
+            if not attacks:
+                # No attack history - use TH prior with maximum uncertainty
+                prior = self.th_priors.get(current_th, {
+                    "avg_destruction": 75.0,
+                    "std_destruction": 25.0
+                })
+                results.append({
+                    "tag": f"#{normalized_tag}",
+                    "name": player_name,
+                    "town_hall": current_th,
+                    "strength_score": 0,
+                    "same_th_3star_rate": 0,
+                    "plus_one_3star_rate": 0,
+                    "avg_destruction": round(prior["avg_destruction"], 1),
+                    "destruction_std": round(prior["std_destruction"], 1),
+                    "sample_size": 0,
+                    "reliability": "none",
+                    "has_data": False
+                })
+                continue
+
+            # Calculate 3-star rates by TH differential (for display only)
+            same_th_attacks = [a for a in attacks if a["attacker_th"] == a["defender_th"]]
+            plus_one_attacks = [a for a in attacks if a["attacker_th"] - a["defender_th"] == -1]
+
+            same_th_3stars = sum(1 for a in same_th_attacks if a["stars"] == 3)
+            plus_one_3stars = sum(1 for a in plus_one_attacks if a["stars"] == 3)
+
+            same_th_3star_rate = (same_th_3stars / len(same_th_attacks) * 100) if same_th_attacks else None
+            plus_one_3star_rate = (plus_one_3stars / len(plus_one_attacks) * 100) if plus_one_attacks else None
+
+            # Calculate overall 3-star rate (all attacks)
+            total_3stars = sum(1 for a in attacks if a["stars"] == 3)
+            overall_3star_rate = total_3stars / len(attacks) * 100
+
+            # Use Bayesian prediction approach: blend player stats with TH prior
+            sample_size = len(attacks)
+            prior = self.th_priors.get(current_th, {
+                "avg_destruction": 75.0,
+                "std_destruction": 20.0
+            })
+
+            # Calculate player's actual stats
+            destructions = [a["destruction"] for a in attacks]
+            player_avg = sum(destructions) / len(destructions)
+            player_variance = sum((d - player_avg) ** 2 for d in destructions) / len(destructions)
+            player_std = player_variance ** 0.5
+
+            # Blend with prior based on sample size (same as predict() method)
+            if sample_size >= 6:
+                player_weight = 0.9
+            elif sample_size >= 2:
+                player_weight = 0.7
+            else:
+                player_weight = 0.5
+
+            prior_weight = 1 - player_weight
+            blended_avg = player_weight * player_avg + prior_weight * prior["avg_destruction"]
+            blended_std = player_weight * player_std + prior_weight * prior["std_destruction"]
+
+            # Calculate confidence interval
+            ci_margin = 1.645 * blended_std / (sample_size ** 0.5)
+            lower_bound = max(0, blended_avg - ci_margin)
+            upper_bound = min(100, blended_avg + ci_margin)
+
+            # Apply risk tolerance to get effective score
+            # risk_tolerance: 0 = pessimistic (lower CI), 1 = optimistic (expected value)
+            effective_destruction = (
+                risk_tolerance * blended_avg +
+                (1 - risk_tolerance) * lower_bound
+            )
+
+            # Consistency bonus (lower std = more reliable)
+            consistency_bonus = 100 - min(blended_std, 30)
+
+            # Calculate strength score
+            # Primarily based on predicted destruction, with bonuses for 3-star rate and consistency
+            strength_score = (
+                0.70 * effective_destruction +
+                0.20 * overall_3star_rate +
+                0.10 * consistency_bonus
+            )
+
+            # Determine reliability
+            if sample_size >= 10:
+                reliability = "high"
+            elif sample_size >= 5:
+                reliability = "medium"
+            else:
+                reliability = "low"
+
+            results.append({
+                "tag": f"#{normalized_tag}",
+                "name": player_name,
+                "town_hall": current_th,
+                "strength_score": round(strength_score, 1),
+                "same_th_3star_rate": round(same_th_3star_rate, 1) if same_th_3star_rate is not None else None,
+                "plus_one_3star_rate": round(plus_one_3star_rate, 1) if plus_one_3star_rate is not None else None,
+                "overall_3star_rate": round(overall_3star_rate, 1),
+                "avg_destruction": round(blended_avg, 1),
+                "destruction_std": round(blended_std, 1),
+                "confidence_range": [round(lower_bound, 1), round(upper_bound, 1)],
+                "sample_size": sample_size,
+                "reliability": reliability,
+                "has_data": True
+            })
+
+        # Sort by strength score descending
+        results.sort(key=lambda x: x["strength_score"], reverse=True)
+
+        return results

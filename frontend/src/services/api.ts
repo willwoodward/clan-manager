@@ -169,6 +169,24 @@ export const analytics = {
     })
     return response.data
   },
+
+  /**
+   * Optimize war lineup from opted-in players
+   */
+  async optimizeLineup(params: {
+    opted_in_tags: string[]
+    war_size?: number
+    risk_tolerance: number
+    suggest_additional: boolean
+  }) {
+    const response = await analyticsApi.post('/lineup/optimize', {
+      opted_in_tags: params.opted_in_tags,
+      war_size: params.war_size,
+      risk_tolerance: params.risk_tolerance,
+      suggest_additional: params.suggest_additional,
+    })
+    return response.data
+  },
 }
 
 /**
