@@ -3,7 +3,7 @@ import { clashApi } from '@/services/clash-api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Users, Trophy, Swords, TrendingUp } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { UnifiedBarChart } from '@/components/ui/chart'
 import { EventLog } from '@/components/event-log'
 import { ActivityGraph } from '@/components/activity-graph'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
@@ -60,12 +60,14 @@ export function Dashboard() {
     },
   ]
 
-  // Mock data for charts
-  const donationData = clan.memberList.slice(0, 10).map(member => ({
-    name: member.name.length > 10 ? member.name.substring(0, 10) + '...' : member.name,
-    donations: member.donations,
-    received: member.donationsReceived,
-  }))
+  // Chart data
+  const donationData = clan.memberList
+    .map(member => ({
+      name: member.name.length > 10 ? member.name.substring(0, 10) + '...' : member.name,
+      donations: member.donations,
+    }))
+    .sort((a, b) => b.donations - a.donations)
+    .slice(0, 10)
 
   const trophyData = clan.memberList
     .map(member => ({
@@ -123,19 +125,17 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Top Donors</CardTitle>
-            <CardDescription>Donations vs Received</CardDescription>
+            <CardDescription>Troops donated this season</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={donationData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip />
-                <Bar dataKey="donations" fill="hsl(var(--primary))" />
-                <Bar dataKey="received" fill="hsl(var(--muted))" />
-              </BarChart>
-            </ResponsiveContainer>
+            <UnifiedBarChart
+              data={donationData}
+              dataKeys={[{ key: 'donations', name: 'Donations', color: 'hsl(var(--primary))' }]}
+              xAxisDataKey="name"
+              showLegend={false}
+              showAllLabels={true}
+              height={300}
+            />
           </CardContent>
         </Card>
 
@@ -145,20 +145,14 @@ export function Dashboard() {
             <CardDescription>Current trophy count</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trophyData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="trophies"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <UnifiedBarChart
+              data={trophyData}
+              dataKeys={[{ key: 'trophies', name: 'Trophies', color: 'hsl(var(--primary))' }]}
+              xAxisDataKey="name"
+              showLegend={false}
+              showAllLabels={true}
+              height={300}
+            />
           </CardContent>
         </Card>
       </div>

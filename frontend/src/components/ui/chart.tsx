@@ -38,6 +38,13 @@ interface LineChartProps extends ChartProps {
 
 interface BarChartProps extends ChartProps {
   dataKeys: Array<{ key: string; color?: string; name?: string }>
+  xAxisDataKey?: string
+  xAxisFormatter?: (value: any) => string
+  labelFormatter?: (label: any) => string
+  showLegend?: boolean
+  layout?: 'horizontal' | 'vertical'
+  showAllLabels?: boolean
+  showGrid?: boolean
 }
 
 interface AreaChartProps extends ChartProps {
@@ -161,38 +168,85 @@ export function UnifiedBarChart({
   data,
   dataKeys,
   height = 300,
+  xAxisDataKey = 'date',
+  xAxisFormatter,
+  labelFormatter,
+  showLegend = true,
+  layout = 'horizontal',
+  showAllLabels = false,
+  showGrid = true,
   children,
 }: BarChartProps) {
+  const defaultXAxisFormatter = (value: any) => {
+    if (!value) return ''
+    // If it looks like a date, format it
+    if (xAxisDataKey === 'date') {
+      const date = new Date(value)
+      if (!isNaN(date.getTime())) {
+        return `${date.getMonth() + 1}/${date.getDate()}`
+      }
+    }
+    return String(value)
+  }
+
+  const defaultLabelFormatter = (label: any) => {
+    if (!label) return ''
+    // If it looks like a date, format it
+    if (xAxisDataKey === 'date') {
+      const date = new Date(label)
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString()
+      }
+    }
+    return String(label)
+  }
+
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-            tickFormatter={(value) => {
-              if (!value) return ''
-              const date = new Date(value)
-              return `${date.getMonth() + 1}/${date.getDate()}`
-            }}
-          />
-          <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+        <BarChart data={data} layout={layout}>
+          {showGrid && <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />}
+          {layout === 'horizontal' ? (
+            <>
+              <XAxis
+                dataKey={xAxisDataKey}
+                tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={xAxisFormatter || defaultXAxisFormatter}
+                interval={showAllLabels ? 0 : 'preserveStartEnd'}
+                angle={showAllLabels ? -45 : 0}
+                textAnchor={showAllLabels ? 'end' : 'middle'}
+                height={showAllLabels ? 60 : 30}
+              />
+              <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+            </>
+          ) : (
+            <>
+              <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+              <YAxis
+                type="category"
+                dataKey={xAxisDataKey}
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={xAxisFormatter || defaultXAxisFormatter}
+                width={80}
+                interval={showAllLabels ? 0 : 'preserveStartEnd'}
+              />
+            </>
+          )}
           <Tooltip
+            cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
             content={(props) => (
               <CustomTooltip
                 {...props}
-                labelFormatter={(label: string) => {
-                  if (!label) return ''
-                  return new Date(label).toLocaleDateString()
-                }}
+                labelFormatter={labelFormatter || defaultLabelFormatter}
               />
             )}
           />
-          <Legend
-            wrapperStyle={{ fontSize: 12 }}
-            iconType="circle"
-          />
+          {showLegend && (
+            <Legend
+              wrapperStyle={{ fontSize: 12 }}
+              iconType="circle"
+            />
+          )}
           {children}
           {dataKeys.map((item) => (
             <Bar
@@ -200,7 +254,7 @@ export function UnifiedBarChart({
               dataKey={item.key}
               fill={item.color || 'hsl(var(--primary))'}
               name={item.name || item.key}
-              radius={[4, 4, 0, 0]}
+              radius={layout === 'horizontal' ? [4, 4, 0, 0] : [0, 4, 4, 0]}
             />
           ))}
         </BarChart>
