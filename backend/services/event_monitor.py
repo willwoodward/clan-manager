@@ -224,6 +224,8 @@ async def save_war_data(war):
 
         # Track war attacks as activity points
         try:
+            war_type = "CWL" if war.is_cwl else "War"
+
             # Count attacks per player from our clan
             attack_counts = {}
             for attack in (war.attacks or []):
@@ -247,9 +249,23 @@ async def save_war_data(war):
                     activity_tracker.update_activity(
                         player_tag=attacker_tag,
                         player_name=attacker_name,
-                        activity_type="attack",
-                        metadata={"attack_type": "cwl" if war.is_cwl else "war"}
+                        activity_type="war_attack",
+                        metadata={"war_type": war_type, "opponent": war.opponent.name}
                     )
+
+                # Log war attack event
+                event_logger.log_event(
+                    "WAR_ATTACK",
+                    f"⚔️ {attacker_name} attacked in {war_type}",
+                    f"{attacker_name} used {attack_count} attack{'s' if attack_count > 1 else ''} vs {war.opponent.name}",
+                    {
+                        "player_tag": attacker_tag,
+                        "player_name": attacker_name,
+                        "attack_count": attack_count,
+                        "war_type": war_type,
+                        "opponent": war.opponent.name,
+                    }
+                )
 
                 logger.info(f"Tracked {attack_count} war attacks for {attacker_name}")
 
@@ -493,7 +509,7 @@ async def on_player_achievement(old_player, new_player):
 
     attack_achievements = {
         "Conqueror": "attack_wins",
-        "War Hero": "war_stars"
+        # Note: "War Hero" removed - war attacks are tracked separately when wars end
     }
 
     builder_base_achievements = {
@@ -818,6 +834,7 @@ async def on_raid_weekend_end():
                 member_tag = member.get("tag")
                 member_name = member.get("name")
                 attack_count = member.get("attack_count", 0)
+                capital_loot = member.get("capital_resources_looted", 0)
 
                 if member_tag and attack_count > 0:
                     # Track each attack separately for proper activity scoring
@@ -825,9 +842,22 @@ async def on_raid_weekend_end():
                         activity_tracker.update_activity(
                             player_tag=member_tag,
                             player_name=member_name,
-                            activity_type="attack",
-                            metadata={"attack_type": "raid"}
+                            activity_type="raid_attack",
+                            metadata={"capital_loot": capital_loot}
                         )
+
+                    # Log raid attack event
+                    event_logger.log_event(
+                        "RAID_ATTACK",
+                        f"🏰 {member_name} raided",
+                        f"{member_name} used {attack_count} raid attack{'s' if attack_count > 1 else ''} ({capital_loot:,} capital gold)",
+                        {
+                            "player_tag": member_tag,
+                            "player_name": member_name,
+                            "attack_count": attack_count,
+                            "capital_loot": capital_loot,
+                        }
+                    )
 
                     logger.info(f"Tracked {attack_count} capital raid attacks for {member_name}")
 
@@ -965,6 +995,13 @@ async def check_war_state():
     while True:
         try:
             war = await client.get_current_war(settings.clan_tag)
+
+            # Initialize state on first run without logging events
+            if previous_war_state is None:
+                previous_war_state = war.state
+                logger.info(f"Initialized war state tracking: {war.state}")
+                await asyncio.sleep(300)
+                continue
 
             if war.state != previous_war_state:
                 if war.state == "inWar":

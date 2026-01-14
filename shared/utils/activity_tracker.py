@@ -154,6 +154,16 @@ class ActivityTracker:
             # Count builder base attacks too
             daily_data["attacks"] += 1
 
+        elif activity_type == "war_attack":
+            # Count war attacks
+            daily_data["attacks"] += 1
+            daily_data["war_attacks"] = daily_data.get("war_attacks", 0) + 1
+
+        elif activity_type == "raid_attack":
+            # Count raid weekend attacks
+            daily_data["attacks"] += 1
+            daily_data["raid_attacks"] = daily_data.get("raid_attacks", 0) + 1
+
         elif activity_type == "clan_games":
             # Clan games points don't affect daily activity score
             # but we still track the timestamp

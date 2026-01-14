@@ -114,6 +114,8 @@ class EventType:
     WAR_END = "war_end"
     WAR_WON = "war_won"
     WAR_LOST = "war_lost"
+    WAR_ATTACK = "war_attack"
+    RAID_ATTACK = "raid_attack"
     DONATION_MILESTONE = "donation_milestone"
     PROMOTION = "promotion"
     DEMOTION = "demotion"

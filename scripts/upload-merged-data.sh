@@ -4,7 +4,7 @@
 
 set -e
 
-REMOTE_HOST="root@138.68.159.29"
+REMOTE_HOST="root@209.38.169.188"
 REMOTE_DATA_PATH="/var/clan-data/"
 LOCAL_DATA_PATH="./data/"
 
