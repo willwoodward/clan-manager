@@ -1,166 +1,127 @@
-import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Save, RefreshCw, Key, Shield } from 'lucide-react'
+import { Shield, Star, Trash2, AlertCircle } from 'lucide-react'
+import { ClanSelector } from '@/components/clan-selector'
+import { useClanContext } from '@/hooks/use-clan-context'
+import { getProxiedImageUrl } from '@/utils/image-proxy'
 
 export function Settings() {
-  const [clanTag, setClanTag] = useState('#2PP')
-  const [apiKey, setApiKey] = useState('')
-  const [autoRefresh, setAutoRefresh] = useState(true)
-  const [refreshInterval, setRefreshInterval] = useState(5)
+  const {
+    currentClan,
+    savedClans,
+    removeSavedClan,
+    monitoredClanTag,
+    isMonitored,
+  } = useClanContext()
 
-  const handleSave = () => {
-    // Save settings logic
-    console.log('Settings saved:', { clanTag, autoRefresh, refreshInterval })
-  }
+  const normalizeTag = (tag: string) => tag.toUpperCase().replace('#', '')
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Manage your clan manager configuration</p>
+        <p className="text-muted-foreground">Manage clans and app configuration</p>
       </div>
 
-      {/* API Configuration */}
+      {/* Clan Management */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Key className="h-5 w-5" />
-            API Configuration
+            <Shield className="h-5 w-5" />
+            Clan Management
           </CardTitle>
           <CardDescription>
-            Configure your Clash of Clans API key and clan tag
+            Switch between clans or add new ones to track
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Current Clan */}
           <div>
             <label className="text-sm font-medium block mb-2">
-              Clash of Clans API Key
+              Current Clan
             </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your API key..."
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Get your API key from{' '}
-              <a
-                href="https://developer.clashofclans.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                developer.clashofclans.com
-              </a>
+            <ClanSelector />
+            {!isMonitored && currentClan && (
+              <div className="flex items-center gap-2 text-xs text-amber-500 mt-2">
+                <AlertCircle className="h-3 w-3" />
+                <span>Limited features - historical data not available for this clan</span>
+              </div>
+            )}
+          </div>
+
+          {/* Primary (Monitored) Clan Info */}
+          <div className="p-4 rounded-lg bg-muted/50">
+            <div className="flex items-center gap-2 mb-2">
+              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+              <span className="font-medium">Primary Clan</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Your primary clan <Badge variant="outline">{monitoredClanTag}</Badge> has access to all features including war predictions, lineup optimizer, and historical statistics.
             </p>
           </div>
 
-          <div>
-            <label className="text-sm font-medium block mb-2">Clan Tag</label>
-            <input
-              type="text"
-              value={clanTag}
-              onChange={(e) => setClanTag(e.target.value)}
-              placeholder="#2PP"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Enter your clan tag (with or without the # symbol)
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4 p-4 rounded-lg bg-muted">
-            <Shield className="h-5 w-5 text-primary" />
-            <div className="flex-1">
-              <p className="text-sm font-medium">API Status</p>
-              <p className="text-xs text-muted-foreground">
-                Using mock data - Configure API key to fetch live data
-              </p>
-            </div>
-            <Badge variant="outline">Mock Mode</Badge>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Data Refresh Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <RefreshCw className="h-5 w-5" />
-            Data Refresh
-          </CardTitle>
-          <CardDescription>Control how often data is refreshed</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Auto Refresh</p>
-              <p className="text-sm text-muted-foreground">
-                Automatically refresh clan data
-              </p>
-            </div>
-            <Button
-              variant={autoRefresh ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setAutoRefresh(!autoRefresh)}
-            >
-              {autoRefresh ? 'Enabled' : 'Disabled'}
-            </Button>
-          </div>
-
-          {autoRefresh && (
+          {/* Saved Clans */}
+          {savedClans.length > 0 && (
             <div>
               <label className="text-sm font-medium block mb-2">
-                Refresh Interval (minutes)
+                Saved Clans ({savedClans.length})
               </label>
-              <input
-                type="number"
-                value={refreshInterval}
-                onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                min="1"
-                max="60"
-                className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Data will refresh every {refreshInterval} minute{refreshInterval !== 1 ? 's' : ''}
-              </p>
+              <div className="space-y-2">
+                {savedClans.map((clan) => {
+                  const isClanMonitored = normalizeTag(clan.tag) === normalizeTag(monitoredClanTag)
+                  const isCurrentClan = currentClan && normalizeTag(clan.tag) === normalizeTag(currentClan.tag)
+                  return (
+                    <div
+                      key={clan.tag}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        isCurrentClan ? 'border-primary bg-primary/5' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clan.badgeUrl && (
+                          <img
+                            src={getProxiedImageUrl(clan.badgeUrl)}
+                            alt=""
+                            className="h-8 w-8 rounded"
+                          />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{clan.name}</span>
+                            {isClanMonitored && (
+                              <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{clan.tag}</span>
+                            {isClanMonitored ? (
+                              <Badge variant="secondary" className="text-xs">Primary</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">Live data only</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {!isClanMonitored && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeSavedClan(clan.tag)}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* About */}
-      <Card>
-        <CardHeader>
-          <CardTitle>About</CardTitle>
-          <CardDescription>Application information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Version</span>
-            <span className="font-medium">0.1.0</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Framework</span>
-            <span className="font-medium">React + TypeScript</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">UI Components</span>
-            <span className="font-medium">shadcn/ui</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} size="lg">
-          <Save className="h-4 w-4" />
-          Save Settings
-        </Button>
-      </div>
     </div>
   )
 }

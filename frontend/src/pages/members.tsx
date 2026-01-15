@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { ClickablePlayerName } from '@/components/clickable-player-name'
 import { PlayerCard } from '@/components/player-card'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
+import { useClanContext } from '@/hooks/use-clan-context'
 
 type SortField = 'name' | 'trophies' | 'donations' | 'townHallLevel' | 'leagueTier' | 'lastActive'
 type SortDirection = 'asc' | 'desc'
@@ -46,7 +47,7 @@ export function Members() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedPlayerTag, setSelectedPlayerTag] = useState<string | null>(null)
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag, isMonitored } = useClanContext()
 
   const { data: clan, isLoading } = useQuery({
     queryKey: ['clan', clanTag],
@@ -54,10 +55,12 @@ export function Members() {
     refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
   })
 
+  // Activity data only available for monitored clan
   const { data: activityData } = useQuery({
     queryKey: ['activity', 'all'],
     queryFn: () => activity.getAllActivities(),
     refetchInterval: 30 * 1000, // Refetch every 30 seconds
+    enabled: isMonitored,
   })
 
   if (isLoading || !clan) {

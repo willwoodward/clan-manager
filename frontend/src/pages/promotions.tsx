@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown, Award, AlertTriangle, CheckCircle, XCircle, T
 import { useState, useEffect } from 'react'
 import type { MemberWarStats } from '@/types/cwl'
 import type { War } from '@/types/clash'
+import { useClanContext } from '@/hooks/use-clan-context'
 
 // Load donation requirements from localStorage or use defaults
 const loadDonationRequirements = () => {
@@ -111,7 +112,7 @@ interface MemberAnalysis extends MemberWarStats {
 }
 
 export function Promotions() {
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag } = useClanContext()
   const [memberAnalyses, setMemberAnalyses] = useState<MemberAnalysis[]>([])
   const [playerDataCache, setPlayerDataCache] = useState<MemberWarStats[]>([])
   const [currentWar, setCurrentWar] = useState<War | null>(null)

@@ -56,6 +56,45 @@ async def get_clan_members(clan_tag: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/clan/{clan_tag}/metadata")
+async def get_clan_metadata(clan_tag: str):
+    """
+    Get clan metadata including whether it's the monitored clan.
+
+    Args:
+        clan_tag: Clan tag (with or without #)
+
+    Returns:
+        Metadata about the clan including monitored status and available features
+    """
+    from ..config import settings
+
+    # Normalize tags for comparison
+    normalized_request = clan_tag.upper().replace('#', '').replace('%23', '')
+    normalized_monitored = settings.clan_tag.upper().replace('#', '')
+
+    is_monitored = normalized_request == normalized_monitored
+
+    return {
+        "clan_tag": clan_tag,
+        "is_monitored": is_monitored,
+        "monitored_clan_tag": settings.clan_tag,
+        "features": {
+            "war_predictions": is_monitored,
+            "lineup_optimizer": is_monitored,
+            "player_stats": is_monitored,
+            "war_history": is_monitored,
+            "clan_games_history": is_monitored,
+            "cwl_history": is_monitored,
+            "live_clan_info": True,
+            "live_member_list": True,
+            "live_current_war": True,
+            "live_cwl_group": True,
+            "live_capital_raids": True,
+        }
+    }
+
+
 @router.get("/currentwar/{clan_tag}")
 async def get_current_war(clan_tag: str):
     """

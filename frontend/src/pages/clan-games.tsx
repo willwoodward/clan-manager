@@ -9,6 +9,8 @@ import { ClickablePlayerName } from '@/components/clickable-player-name'
 import { PlayerCard } from '@/components/player-card'
 import { ClanGamesPodium } from '@/components/clan-games-podium'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { useClanContext } from '@/hooks/use-clan-context'
+import { FeatureGate } from '@/components/feature-gate'
 
 // API base URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -40,7 +42,7 @@ function formatTimeAgo(date: Date): string {
 
 export function ClanGames() {
   const [selectedPlayerTag, setSelectedPlayerTag] = useState<string | null>(null)
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag, isMonitored } = useClanContext()
 
   const { data: clan, isLoading: clanLoading } = useQuery({
     queryKey: ['clan', clanTag],
@@ -48,6 +50,7 @@ export function ClanGames() {
     refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
   })
 
+  // Leaderboard data only available for monitored clan
   const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
     queryKey: ['clan-games-leaderboard'],
     queryFn: async () => {
@@ -55,8 +58,10 @@ export function ClanGames() {
       return response.data
     },
     refetchInterval: 30 * 1000, // Refetch every 30 seconds
+    enabled: isMonitored,
   })
 
+  // History data only available for monitored clan
   const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: ['clan-games-history'],
     queryFn: async () => {
@@ -64,8 +69,10 @@ export function ClanGames() {
       return response.data
     },
     refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
+    enabled: isMonitored,
   })
 
+  // Current session data only available for monitored clan
   const { data: currentSessionData } = useQuery({
     queryKey: ['clan-games-current-session'],
     queryFn: async () => {
@@ -73,9 +80,10 @@ export function ClanGames() {
       return response.data
     },
     refetchInterval: 30 * 1000,
+    enabled: isMonitored,
   })
 
-  if (clanLoading || leaderboardLoading || !clan) {
+  if (clanLoading || (isMonitored && leaderboardLoading) || !clan) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">

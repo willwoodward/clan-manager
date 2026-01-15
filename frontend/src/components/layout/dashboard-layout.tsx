@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/components/theme-provider'
+import { ClanSelector } from '@/components/clan-selector'
 import { useState, useEffect } from 'react'
 
 const navigation = [
@@ -104,6 +105,11 @@ export function DashboardLayout() {
               <h1 className="text-xl font-bold">Clan Manager</h1>
               <p className="text-xs text-muted-foreground">Clash of Clans</p>
             </div>
+          </div>
+
+          {/* Clan Selector */}
+          <div className="hidden border-b px-4 py-3 lg:block">
+            <ClanSelector />
           </div>
 
           {/* Navigation */}

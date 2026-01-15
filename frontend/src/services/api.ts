@@ -70,6 +70,15 @@ export const coc = {
     const response = await cocApi.get(`/player/${encodedTag}`)
     return response.data
   },
+
+  /**
+   * Get clan metadata including whether it's the monitored clan
+   */
+  async getClanMetadata(clanTag: string) {
+    const encodedTag = encodeTag(clanTag)
+    const response = await cocApi.get(`/clan/${encodedTag}/metadata`)
+    return response.data
+  },
 }
 
 /**

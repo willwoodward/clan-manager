@@ -8,9 +8,11 @@ import { EventLog } from '@/components/event-log'
 import { ActivityGraph } from '@/components/activity-graph'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
 import { StatisticsCards } from '@/components/statistics-cards'
+import { FeatureGate } from '@/components/feature-gate'
+import { useClanContext } from '@/hooks/use-clan-context'
 
 export function Dashboard() {
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag } = useClanContext()
 
   const { data: clan, isLoading } = useQuery({
     queryKey: ['clan', clanTag],
@@ -117,8 +119,10 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* Resource Statistics */}
-      <StatisticsCards clanTag={clanTag} />
+      {/* Resource Statistics - Requires historical data */}
+      <FeatureGate feature="clanGamesHistory" showPlaceholder={false}>
+        <StatisticsCards clanTag={clanTag} />
+      </FeatureGate>
 
       {/* Charts */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -157,11 +161,13 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Activity and Recent Events */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ActivityGraph clanTag={clanTag} days={14} />
-        <EventLog limit={20} />
-      </div>
+      {/* Activity and Recent Events - Requires historical data */}
+      <FeatureGate feature="playerStats" showPlaceholder={false}>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ActivityGraph clanTag={clanTag} days={14} />
+          <EventLog limit={20} />
+        </div>
+      </FeatureGate>
     </div>
   )
 }

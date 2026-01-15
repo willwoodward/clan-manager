@@ -14,6 +14,7 @@ import { PlayerCard } from '@/components/player-card'
 import { ClickablePlayerName } from '@/components/clickable-player-name'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
 import { ChartSkeleton } from '@/components/ui/loading'
+import { useClanContext } from '@/hooks/use-clan-context'
 import {
   Dialog,
   DialogContent,
@@ -83,7 +84,7 @@ function saveLineupSelection(selectedTags: string[]) {
 }
 
 export function CWL() {
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag } = useClanContext()
   const [sortField, setSortField] = useState<SortField>('score')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [memberStats, setMemberStats] = useState<Array<MemberWarStats & { score: number; historicalStats?: any; participationRate?: number }>>([])

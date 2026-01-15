@@ -6,9 +6,10 @@ import { UserPlus, TrendingUp, AlertCircle, Trophy, Activity, Target } from 'luc
 import { THDistributionChart } from '@/components/th-distribution-chart'
 import { TrophyLeagueColumnChart } from '@/components/trophy-league-column-chart'
 import { getTHCounts, compareClanToLeague, getTop15Members } from '@/data/cwl-distributions'
+import { useClanContext } from '@/hooks/use-clan-context'
 
 export function Recruitment() {
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag } = useClanContext()
 
   const { data: clan, isLoading: clanLoading } = useQuery({
     queryKey: ['clan', clanTag],

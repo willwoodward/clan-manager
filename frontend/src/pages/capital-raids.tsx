@@ -15,13 +15,14 @@ import { useState } from 'react'
 import { getProxiedImageUrl } from '@/utils/image-proxy'
 import { CapitalRaidsModal } from '@/components/capital-raids-modal'
 import { UnifiedLineChart } from '@/components/ui/chart'
+import { useClanContext } from '@/hooks/use-clan-context'
 
 type SortField = 'name' | 'attacks' | 'capitalResourcesLooted' | 'avgPerAttack'
 type SortDirection = 'asc' | 'desc'
 type MetricType = 'medals' | 'gold' | 'trophies' | 'participation'
 
 export function CapitalRaids() {
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag } = useClanContext()
   const [sortField, setSortField] = useState<SortField>('capitalResourcesLooted')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [modalOpen, setModalOpen] = useState(false)

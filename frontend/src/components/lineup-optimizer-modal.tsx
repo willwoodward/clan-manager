@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Slider } from '@/components/ui/slider'
 import { coc, analytics } from '@/services/api'
 import { Users, Search, Star, AlertCircle, UserPlus, ChevronDown, ChevronUp } from 'lucide-react'
+import { useClanContext } from '@/hooks/use-clan-context'
 
 interface LineupOptimizerModalProps {
   open: boolean
@@ -54,7 +55,7 @@ interface OptimizationResult {
 }
 
 export function LineupOptimizerModal({ open, onClose }: LineupOptimizerModalProps) {
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag } = useClanContext()
 
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set())
   const [riskTolerance, setRiskTolerance] = useState(50)

@@ -13,12 +13,14 @@ import { WarStatisticsCards } from '@/components/war-statistics-cards'
 import { WarDetailModal } from '@/components/war-detail-modal'
 import { ClanWarFlipCard } from '@/components/clan-war-flip-card'
 import { LineupOptimizerModal } from '@/components/lineup-optimizer-modal'
+import { FeatureGate } from '@/components/feature-gate'
+import { useClanContext } from '@/hooks/use-clan-context'
 
 type MemberSortField = 'name' | 'attacks' | 'townhallLevel'
 type SortDirection = 'asc' | 'desc'
 
 export function Wars() {
-  const clanTag = import.meta.env.VITE_CLAN_TAG || '#2PP'
+  const { clanTag, isMonitored } = useClanContext()
   const [memberSortField, setMemberSortField] = useState<MemberSortField>('attacks')
   const [memberSortDirection, setMemberSortDirection] = useState<SortDirection>('asc')
   const [selectedPlayerTag, setSelectedPlayerTag] = useState<string | null>(null)
@@ -34,11 +36,13 @@ export function Wars() {
   })
 
   // Fetch war history from our backend (stored wars with attack data)
+  // Only available for monitored clan
   const { data: warHistory, isLoading: logLoading } = useQuery({
     queryKey: ['warHistory'],
     queryFn: () => analytics.getWarHistory({ limit: 20 }),
     refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
     retry: 1,
+    enabled: isMonitored,
   })
 
   const isLoading = warLoading || logLoading
@@ -142,14 +146,16 @@ export function Wars() {
           <h1 className="text-3xl font-bold">Clan Wars</h1>
           <p className="text-muted-foreground">Track your clan's war performance</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => setLineupOptimizerOpen(true)}
-          className="flex items-center gap-2"
-        >
-          <Users className="h-4 w-4" />
-          Plan Lineup
-        </Button>
+        {isMonitored && (
+          <Button
+            variant="outline"
+            onClick={() => setLineupOptimizerOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Users className="h-4 w-4" />
+            Plan Lineup
+          </Button>
+        )}
       </div>
 
       {/* Current War */}
@@ -358,20 +364,23 @@ export function Wars() {
         </Card>
       )}
 
-      {/* War Stats */}
-      <WarStatisticsCards />
+      {/* War Stats - Requires historical data */}
+      <FeatureGate feature="warHistory">
+        <WarStatisticsCards />
+      </FeatureGate>
 
-      {/* War History */}
-      {wars.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Wars</CardTitle>
-            <CardDescription>
-              Click on any war to see detailed statistics ({wars.length} wars total)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+      {/* War History - Requires historical data */}
+      <FeatureGate feature="warHistory">
+        {wars.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Wars</CardTitle>
+              <CardDescription>
+                Click on any war to see detailed statistics ({wars.length} wars total)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
               {wars.slice(0, 10).map((war: any) => {
                 const clanStars = war.clan_stars || 0
                 const oppStars = war.opponent_stars || 0
@@ -427,7 +436,8 @@ export function Wars() {
             )}
           </CardContent>
         </Card>
-      )}
+        )}
+      </FeatureGate>
 
       <PlayerCard
         playerTag={selectedPlayerTag}
