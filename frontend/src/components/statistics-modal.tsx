@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { UnifiedLineChart, UnifiedBarChart } from '@/components/ui/chart'
-import { statistics, cwl } from '@/services/api'
+import { statistics, cwl, clanGames } from '@/services/api'
 import {
   Line,
   LineChart,
@@ -38,6 +38,12 @@ export function StatisticsModal({ open, onClose, type, clanTag }: StatisticsModa
   const { data: clanGamesHistory } = useQuery({
     queryKey: ['clan-games-history', clanTag],
     queryFn: () => statistics.getClanGamesHistory(clanTag, 10),
+    enabled: open && type === 'games',
+  })
+
+  const { data: currentClanGamesSession } = useQuery({
+    queryKey: ['clan-games-current'],
+    queryFn: () => clanGames.getCurrentSession(),
     enabled: open && type === 'games',
   })
 
@@ -120,18 +126,58 @@ export function StatisticsModal({ open, onClose, type, clanTag }: StatisticsModa
     }
 
     if (type === 'games') {
-      // Check if there's any completed clan games history
-      if (clanGamesHistory?.items && clanGamesHistory.items.length > 0) {
+      // Check for active session
+      const activeSession = currentClanGamesSession?.session
+      const hasActiveSession = activeSession && activeSession.status === 'active'
+
+      // Check if there's any completed clan games history OR an active session
+      if ((clanGamesHistory?.items && clanGamesHistory.items.length > 0) || hasActiveSession) {
         // Clan games tier thresholds
         const tierThresholds = [3000, 7500, 12000, 18000, 30000, 50000]
 
-        const chartData = clanGamesHistory.items
+        // Calculate tier from points
+        const getTier = (points: number) => {
+          for (let i = tierThresholds.length - 1; i >= 0; i--) {
+            if (points >= tierThresholds[i]) return i + 1
+          }
+          return 0
+        }
+
+        // Build chart data with actual and projected points (similar to CWL chart)
+        const chartData: any[] = []
+        const historyItems = clanGamesHistory?.items || []
+
+        // Add historical items
+        historyItems
           .map((item: any, index: number) => ({
             date: item.start_time || `Session ${index + 1}`,
             points: item.total_points,
             tier: item.tier_achieved,
           }))
           .reverse()
+          .forEach((item: any, index: number, arr: any[]) => {
+            const isLastHistoricalItem = index === arr.length - 1
+            chartData.push({
+              ...item,
+              // Add projected_points to last historical item to start the dashed line
+              projected_points: (isLastHistoricalItem && hasActiveSession) ? item.points : undefined,
+              isProjected: false,
+            })
+          })
+
+        // Add active session as projected point
+        if (hasActiveSession) {
+          const currentPoints = Object.values(activeSession.players || {}).reduce(
+            (sum: number, player: any) => sum + (player.points_earned || 0),
+            0
+          )
+          chartData.push({
+            date: activeSession.start_time || 'Current',
+            projected_points: currentPoints,
+            tier: getTier(currentPoints),
+            isProjected: true,
+          })
+        }
 
         return (
           <div style={{ height: 350 }}>
@@ -157,8 +203,12 @@ export function StatisticsModal({ open, onClose, type, clanTag }: StatisticsModa
                 />
                 <Tooltip
                   content={(props) => {
-                    const { active, payload, label } = props
+                    const { active, payload } = props
                     if (!active || !payload || !payload.length) return null
+                    // Prefer actual data over projected when both exist at same point
+                    const actualData = payload.find((p: any) => p.dataKey === 'points')
+                    const data = actualData ? actualData.payload : payload[0].payload
+                    const displayPoints = data.points ?? data.projected_points ?? 0
                     return (
                       <div
                         className="bg-background border border-border rounded-lg p-3 shadow-lg"
@@ -168,29 +218,28 @@ export function StatisticsModal({ open, onClose, type, clanTag }: StatisticsModa
                         }}
                       >
                         <div className="text-sm font-medium mb-2">
-                          {label ? (() => {
+                          {data.date ? (() => {
                             try {
-                              return new Date(label).toLocaleDateString()
+                              return new Date(data.date).toLocaleDateString()
                             } catch {
-                              return label
+                              return data.date
                             }
                           })() : ''}
+                          {data.isProjected && <span className="ml-2 text-xs text-muted-foreground">(In Progress)</span>}
                         </div>
-                        <div className="space-y-1">
-                          {payload.map((entry: any, index: number) => (
-                            <div key={index} className="flex items-center gap-2 text-xs">
-                              <div
-                                className="w-3 h-3 rounded"
-                                style={{ backgroundColor: entry.color }}
-                              />
-                              <span className="text-muted-foreground">{entry.name}:</span>
-                              <span className="font-medium">
-                                {entry.name === 'Points'
-                                  ? entry.value.toLocaleString()
-                                  : `Tier ${entry.value}`}
-                              </span>
-                            </div>
-                          ))}
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded"
+                              style={{ backgroundColor: data.isProjected ? '#9ca3af' : '#10b981' }}
+                            />
+                            <span className="text-muted-foreground">Points:</span>
+                            <span className="font-medium">{displayPoints.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground ml-5">Tier:</span>
+                            <span className="font-medium">{data.tier || 0}</span>
+                          </div>
                         </div>
                       </div>
                     )
@@ -217,14 +266,41 @@ export function StatisticsModal({ open, onClose, type, clanTag }: StatisticsModa
                   />
                 ))}
 
-                {/* Main points line */}
+                {/* Projected points line (dashed) - rendered first so actual line appears on top */}
+                <Line
+                  type="monotone"
+                  dataKey="projected_points"
+                  stroke="#9ca3af"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={(props: any) => {
+                    // Only show grey dot for projected points, not for the last actual point
+                    if (props.payload.isProjected) {
+                      return (
+                        <circle
+                          cx={props.cx}
+                          cy={props.cy}
+                          r={4}
+                          fill="#9ca3af"
+                          strokeWidth={0}
+                        />
+                      )
+                    }
+                    return <circle cx={props.cx} cy={props.cy} r={0} fill="transparent" />
+                  }}
+                  name="In Progress"
+                  connectNulls={false}
+                />
+
+                {/* Main points line (solid) */}
                 <Line
                   type="monotone"
                   dataKey="points"
                   stroke="#10b981"
                   strokeWidth={3}
-                  dot={{ fill: '#10b981', r: 4 }}
+                  dot={{ fill: '#10b981', r: 4, strokeWidth: 0 }}
                   name="Points"
+                  connectNulls={false}
                 />
               </LineChart>
             </ResponsiveContainer>

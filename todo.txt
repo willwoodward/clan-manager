@@ -1,4 +1,2 @@
-- Default vs Monitored clans
-- Setting clan through settings page
 - Multi-clan tenants
 - Better loading performance

@@ -89,6 +89,9 @@ cwl_check_task = None
 previous_war_state = None
 tracked_player_tags = set()
 last_saved_war = None  # Track last war we saved to avoid duplicates
+logged_war_attacks = set()  # Track attack orders already logged live (reset per war)
+current_war_identifier = None  # Track current war to reset logged_war_attacks on new war
+recent_war_attackers = {}  # Track player_tag -> timestamp of recent war attacks to prevent duplicate activity logging
 
 
 # War data fetching helper functions
@@ -222,52 +225,66 @@ async def save_war_data(war):
         # Mark this war as saved
         last_saved_war = war_identifier
 
-        # Track war attacks as activity points
+        # Track war attacks as activity points (only for attacks not already logged live)
         try:
+            global logged_war_attacks
             war_type = "CWL" if war.is_cwl else "War"
 
-            # Count attacks per player from our clan
-            attack_counts = {}
+            # Process attacks that weren't logged live
+            missed_attacks = []
             for attack in (war.attacks or []):
-                # Check if this attack was by one of our clan members
+                # Check if this attack was by one of our clan members and not already logged
                 attacker_in_clan = any(m.tag == attack.attacker_tag for m in war.clan.members)
-                if attacker_in_clan:
-                    if attack.attacker_tag not in attack_counts:
-                        attack_counts[attack.attacker_tag] = 0
-                    attack_counts[attack.attacker_tag] += 1
+                if attacker_in_clan and attack.order not in logged_war_attacks:
+                    missed_attacks.append(attack)
 
-            # Update activity tracker for each attacker
-            for attacker_tag, attack_count in attack_counts.items():
-                # Find attacker name from clan members
-                attacker_name = next(
-                    (m.name for m in war.clan.members if m.tag == attacker_tag),
-                    "Unknown"
-                )
+            if missed_attacks:
+                logger.info(f"Processing {len(missed_attacks)} attacks that weren't logged live")
 
-                # Track each attack separately for proper activity scoring
-                for _ in range(attack_count):
+                for attack in missed_attacks:
+                    attacker_name = next(
+                        (m.name for m in war.clan.members if m.tag == attack.attacker_tag),
+                        "Unknown"
+                    )
+                    defender_name = next(
+                        (m.name for m in war.opponent.members if m.tag == attack.defender_tag),
+                        "Unknown"
+                    )
+
+                    # Track as activity
                     activity_tracker.update_activity(
-                        player_tag=attacker_tag,
+                        player_tag=attack.attacker_tag,
                         player_name=attacker_name,
                         activity_type="war_attack",
                         metadata={"war_type": war_type, "opponent": war.opponent.name}
                     )
 
-                # Log war attack event
-                event_logger.log_event(
-                    "WAR_ATTACK",
-                    f"⚔️ {attacker_name} attacked in {war_type}",
-                    f"{attacker_name} used {attack_count} attack{'s' if attack_count > 1 else ''} vs {war.opponent.name}",
-                    {
-                        "player_tag": attacker_tag,
-                        "player_name": attacker_name,
-                        "attack_count": attack_count,
-                        "war_type": war_type,
-                        "opponent": war.opponent.name,
-                    }
-                )
+                    # Log the attack event
+                    event_logger.log_event(
+                        "WAR_ATTACK",
+                        f"⚔️ {attacker_name} attacked in {war_type}",
+                        f"{attacker_name} attacked {defender_name} for {attack.stars}⭐ ({attack.destruction:.0f}%)",
+                        {
+                            "player_tag": attack.attacker_tag,
+                            "player_name": attacker_name,
+                            "defender_tag": attack.defender_tag,
+                            "defender_name": defender_name,
+                            "stars": attack.stars,
+                            "destruction": attack.destruction,
+                            "attack_order": attack.order,
+                            "war_type": war_type,
+                            "opponent": war.opponent.name,
+                        }
+                    )
 
-                logger.info(f"Tracked {attack_count} war attacks for {attacker_name}")
+                    # Track for deduplication with achievement events
+                    recent_war_attackers[attack.attacker_tag] = datetime.now()
+                    logger.info(f"Logged missed attack: {attacker_name} -> {defender_name}")
+            else:
+                logger.info("All war attacks were already logged live")
+
+            # Clear attack tracking for next war
+            logged_war_attacks = set()
 
         except Exception as e:
             logger.error(f"Error tracking war attacks as activity: {e}")
@@ -523,45 +540,61 @@ async def on_player_achievement(old_player, new_player):
 
     event_logged = False
 
+    # Check if this player recently did a war attack (within 10 minutes)
+    # If so, skip attack achievement logging to prevent duplicates
+    war_attack_cooldown = 600  # 10 minutes in seconds
+    is_recent_war_attacker = False
+    if new_player.tag in recent_war_attackers:
+        time_since_war_attack = (datetime.now() - recent_war_attackers[new_player.tag]).total_seconds()
+        if time_since_war_attack < war_attack_cooldown:
+            is_recent_war_attacker = True
+            logger.debug(f"Skipping attack achievement for {new_player.name} - recent war attack ({time_since_war_attack:.0f}s ago)")
+        else:
+            # Clean up old entry
+            del recent_war_attackers[new_player.tag]
+
     # Check for attack wins first (prioritize this over dark elixir loot)
-    for achievement_name, attack_type in attack_achievements.items():
-        old_ach = old_player.get_achievement(achievement_name)
-        new_ach = new_player.get_achievement(achievement_name)
+    # Skip if player recently did a war attack to avoid duplicate activity tracking
+    if not is_recent_war_attacker:
+        for achievement_name, attack_type in attack_achievements.items():
+            old_ach = old_player.get_achievement(achievement_name)
+            new_ach = new_player.get_achievement(achievement_name)
 
-        if old_ach and new_ach and new_ach.value > old_ach.value:
-            wins_gained = new_ach.value - old_ach.value
-            logger.info(f"Attack activity: {new_player.name} {attack_type}")
+            if old_ach and new_ach and new_ach.value > old_ach.value:
+                wins_gained = new_ach.value - old_ach.value
+                logger.info(f"Attack activity: {new_player.name} {attack_type}")
 
-            # Update activity tracker
-            activity_tracker.update_activity(
-                player_tag=new_player.tag,
-                player_name=new_player.name,
-                activity_type="attack",
-                metadata={
-                    "attack_type": attack_type,
-                    "old_value": old_ach.value,
-                    "new_value": new_ach.value,
-                    "wins_gained": wins_gained
-                }
-            )
+                # Update activity tracker
+                activity_tracker.update_activity(
+                    player_tag=new_player.tag,
+                    player_name=new_player.name,
+                    activity_type="attack",
+                    metadata={
+                        "attack_type": attack_type,
+                        "old_value": old_ach.value,
+                        "new_value": new_ach.value,
+                        "wins_gained": wins_gained
+                    }
+                )
 
-            # Log attack event
-            event_logger.log_event(
-                "ATTACK",
-                f"⚔️ {new_player.name} won",
-                f"{new_player.name} won {wins_gained} attack{'s' if wins_gained > 1 else ''}",
-                {
-                    "player_tag": new_player.tag,
-                    "player_name": new_player.name,
-                    "attack_type": attack_type,
-                    "wins_gained": wins_gained,
-                }
-            )
-            event_logged = True
-            break
+                # Log attack event
+                event_logger.log_event(
+                    "ATTACK",
+                    f"⚔️ {new_player.name} won",
+                    f"{new_player.name} won {wins_gained} attack{'s' if wins_gained > 1 else ''}",
+                    {
+                        "player_tag": new_player.tag,
+                        "player_name": new_player.name,
+                        "attack_type": attack_type,
+                        "wins_gained": wins_gained,
+                    }
+                )
+                event_logged = True
+                break
 
     # Only check dark elixir loot if we didn't already log an attack win event
-    if not event_logged:
+    # Also skip if player is a recent war attacker
+    if not event_logged and not is_recent_war_attacker:
         for achievement_name, loot_type in loot_achievements.items():
             old_ach = old_player.get_achievement(achievement_name)
             new_ach = new_player.get_achievement(achievement_name)
@@ -990,7 +1023,7 @@ async def check_league_reset():
 
 async def check_war_state():
     """Check war state periodically."""
-    global previous_war_state
+    global previous_war_state, logged_war_attacks, current_war_identifier
 
     while True:
         try:
@@ -1000,12 +1033,23 @@ async def check_war_state():
             if previous_war_state is None:
                 previous_war_state = war.state
                 logger.info(f"Initialized war state tracking: {war.state}")
+                # Initialize war tracking if currently in war
+                if war.state == "inWar":
+                    war_id = f"{war.clan.tag}_{war.opponent.tag}_{war.start_time}"
+                    current_war_identifier = war_id
+                    logged_war_attacks = set()
+                    logger.info(f"Initialized attack tracking for ongoing war: {war.clan.name} vs {war.opponent.name}")
                 await asyncio.sleep(300)
                 continue
 
             if war.state != previous_war_state:
                 if war.state == "inWar":
                     logger.info("War started")
+                    # Reset attack tracking for new war
+                    war_id = f"{war.clan.tag}_{war.opponent.tag}_{war.start_time}"
+                    current_war_identifier = war_id
+                    logged_war_attacks = set()
+                    logger.info(f"Reset attack tracking for new war: {war.clan.name} vs {war.opponent.name}")
                     event_logger.log_event(
                         EventType.WAR_START,
                         "War Started",
@@ -1103,6 +1147,55 @@ async def check_war_state():
                         )
 
                 previous_war_state = war.state
+
+            # Check for new attacks while war is active (live attack tracking)
+            if war.state == "inWar" and war.attacks:
+                war_type = "CWL" if war.is_cwl else "War"
+
+                for attack in war.attacks:
+                    # Check if this attack was by one of our clan members and not already logged
+                    attacker_in_clan = any(m.tag == attack.attacker_tag for m in war.clan.members)
+                    if attacker_in_clan and attack.order not in logged_war_attacks:
+                        # Find attacker and defender info
+                        attacker_name = next(
+                            (m.name for m in war.clan.members if m.tag == attack.attacker_tag),
+                            "Unknown"
+                        )
+                        defender_name = next(
+                            (m.name for m in war.opponent.members if m.tag == attack.defender_tag),
+                            "Unknown"
+                        )
+
+                        # Log the attack event
+                        event_logger.log_event(
+                            "WAR_ATTACK",
+                            f"⚔️ {attacker_name} attacked in {war_type}",
+                            f"{attacker_name} attacked {defender_name} for {attack.stars}⭐ ({attack.destruction:.0f}%)",
+                            {
+                                "player_tag": attack.attacker_tag,
+                                "player_name": attacker_name,
+                                "defender_tag": attack.defender_tag,
+                                "defender_name": defender_name,
+                                "stars": attack.stars,
+                                "destruction": attack.destruction,
+                                "attack_order": attack.order,
+                                "war_type": war_type,
+                                "opponent": war.opponent.name,
+                            }
+                        )
+
+                        # Track as activity
+                        activity_tracker.update_activity(
+                            player_tag=attack.attacker_tag,
+                            player_name=attacker_name,
+                            activity_type="war_attack",
+                            metadata={"war_type": war_type, "opponent": war.opponent.name}
+                        )
+
+                        # Mark as logged and track for deduplication with achievement events
+                        logged_war_attacks.add(attack.order)
+                        recent_war_attackers[attack.attacker_tag] = datetime.now()
+                        logger.info(f"Live war attack: {attacker_name} -> {defender_name} ({attack.stars}⭐, {attack.destruction:.0f}%)")
 
         except coc.PrivateWarLog:
             logger.warning("War log is private")
