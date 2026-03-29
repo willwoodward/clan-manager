@@ -673,3 +673,156 @@ class PlayerPredictor:
         results.sort(key=lambda x: x["strength_score"], reverse=True)
 
         return results
+
+    async def predict_cwl_matchup(
+        self,
+        our_tags: List[str],
+        opponent_ths: List[int],
+        war_size: Optional[int] = None,
+        opponent_attacks: Optional[List[Dict]] = None,
+    ) -> Dict:
+        """Predict outcome of a CWL matchup against an opponent with known TH distribution.
+
+        opponent_attacks: actual attack records from the current CWL season for the opponent
+        clan ({attacker_th, defender_th, stars, destruction}). When provided these are blended
+        with TH priors so the model reflects the opponent's real CWL performance, not just
+        what that TH level does on average.
+        """
+        import math
+        await self._load_war_data()
+
+        # Pre-compute opponent per-TH stats from their actual CWL attacks if available
+        opp_th_stats: Dict[int, Dict] = {}
+        if opponent_attacks:
+            from collections import defaultdict as _dd
+            th_dest: Dict = _dd(list)
+            for atk in opponent_attacks:
+                th = atk.get("attacker_th", 0)
+                dest = atk.get("destruction", 0)
+                if th > 0:
+                    th_dest[th].append(dest)
+            for th, dests in th_dest.items():
+                opp_th_stats[th] = {
+                    "avg_destruction": sum(dests) / len(dests),
+                    "sample_size": len(dests),
+                }
+
+        valid_sizes = [5, 10, 15, 20, 25, 30, 40, 50]
+        max_possible = min(len(our_tags), len(opponent_ths))
+        if war_size and war_size <= max_possible:
+            actual_size = war_size
+        else:
+            options = [s for s in valid_sizes if s <= max_possible]
+            actual_size = max(options) if options else max_possible
+
+        # Build our player data (TH from history, fallback to CoC API)
+        our_data = []
+        for tag in our_tags:
+            normalized = self._normalize_tag(tag)
+            attacks = self.player_histories.get(normalized, [])
+            name = self.player_names.get(normalized, tag)
+            th = attacks[-1]["attacker_th"] if attacks else 0
+            if th == 0 and self.coc_client:
+                try:
+                    pd = await self.coc_client.get_player(tag)
+                    th = pd.get("townHallLevel", 0) if pd else 0
+                except Exception:
+                    pass
+            our_data.append({"tag": normalized, "name": name, "th": th, "attacks": attacks})
+
+        our_data.sort(key=lambda x: x["th"], reverse=True)
+        our_data = our_data[:actual_size]
+        opp_ths_sorted = sorted(opponent_ths, reverse=True)[:actual_size]
+
+        # Predict our attacks using blended player history + TH prior
+        our_total_stars = 0.0
+        our_total_dest = 0.0
+        matchup_details = []
+        for i, (player, opp_th) in enumerate(zip(our_data, opp_ths_sorted)):
+            attacks = player["attacks"]
+            our_th = player["th"]
+            if not our_th or not opp_th:
+                matchup_details.append({
+                    "position": i + 1,
+                    "our_name": player["name"],
+                    "our_th": our_th,
+                    "their_th": opp_th,
+                    "our_expected_stars": 0.0,
+                    "our_expected_destruction": 0.0,
+                    "sample_size": 0,
+                })
+                continue
+
+            # Use attacks vs similar TH if enough data, else all attacks
+            relevant = [a for a in attacks if abs(a["defender_th"] - opp_th) <= 1] if attacks else []
+            if len(relevant) < 3:
+                relevant = attacks
+
+            prior = self.th_priors.get(our_th, {"avg_destruction": 75.0, "std_destruction": 20.0})
+
+            if len(relevant) >= 6:
+                w = 0.9
+            elif len(relevant) >= 2:
+                w = 0.7
+            elif len(relevant) == 1:
+                w = 0.5
+            else:
+                w = 0.0
+
+            if w > 0:
+                pavg = sum(a["destruction"] for a in relevant) / len(relevant)
+                blended = w * pavg + (1 - w) * prior["avg_destruction"]
+            else:
+                blended = prior["avg_destruction"]
+
+            diff_mult = self._matchup_difficulty(our_th, [], opp_th, [])
+            exp_dest = min(100.0, max(0.0, blended * diff_mult))
+            exp_stars = self._destruction_to_stars(exp_dest)
+            our_total_stars += exp_stars
+            our_total_dest += exp_dest
+            matchup_details.append({
+                "position": i + 1,
+                "our_name": player["name"],
+                "our_th": our_th,
+                "their_th": opp_th,
+                "our_expected_stars": round(exp_stars, 2),
+                "our_expected_destruction": round(exp_dest, 1),
+                "sample_size": len(attacks),
+            })
+
+        # Predict their attacks: blend CWL-actual data (when available) with TH priors
+        their_total_stars = 0.0
+        their_total_dest = 0.0
+        opponent_sample_size = sum(s["sample_size"] for s in opp_th_stats.values())
+        our_def_ths = [p["th"] for p in our_data]
+        for opp_th, our_def_th in zip(opp_ths_sorted, our_def_ths):
+            if not opp_th or not our_def_th:
+                continue
+            global_prior = self.th_priors.get(opp_th, {"avg_destruction": 65.0})
+            opp_actual = opp_th_stats.get(opp_th)
+            if opp_actual and opp_actual["sample_size"] >= 2:
+                # Blend: weight toward actual CWL data, more weight with more samples
+                n = opp_actual["sample_size"]
+                w = 0.8 if n >= 6 else 0.6
+                base_dest = w * opp_actual["avg_destruction"] + (1 - w) * global_prior["avg_destruction"]
+            else:
+                base_dest = global_prior["avg_destruction"]
+            diff_mult = self._matchup_difficulty(opp_th, [], our_def_th, [])
+            exp_dest = min(100.0, max(0.0, base_dest * diff_mult))
+            their_total_stars += self._destruction_to_stars(exp_dest)
+            their_total_dest += exp_dest
+
+        star_diff = our_total_stars - their_total_stars
+        win_prob = 1 / (1 + math.exp(-0.5 * star_diff))
+
+        return {
+            "war_size": actual_size,
+            "our_expected_stars": round(our_total_stars, 1),
+            "our_avg_destruction": round(our_total_dest / actual_size if actual_size else 0, 1),
+            "their_expected_stars": round(their_total_stars, 1),
+            "their_avg_destruction": round(their_total_dest / actual_size if actual_size else 0, 1),
+            "star_difference": round(star_diff, 1),
+            "win_probability": round(win_prob, 3),
+            "opponent_sample_size": opponent_sample_size,
+            "matchup_details": matchup_details,
+        }

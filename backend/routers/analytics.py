@@ -54,6 +54,13 @@ class LineupOptimizeRequest(BaseModel):
     suggest_additional: bool = False  # Include "Consider Adding" section
 
 
+class CWLMatchupRequest(BaseModel):
+    our_lineup_tags: List[str]
+    opponent_ths: List[int]
+    war_size: Optional[int] = None
+    opponent_attacks: Optional[List[dict]] = None  # [{attacker_th, defender_th, stars, destruction}] from current CWL season
+
+
 @router.get("/predict/{player_tag}")
 async def predict_performance(
     player_tag: str,
@@ -410,3 +417,29 @@ def _generate_suggestion_reason(player: dict, threshold_score: float) -> str:
         return f"Proven reliable attacker ({player['sample_size']} attacks) - would strengthen lineup"
 
     return f"Score {score_diff:.1f} points above current lineup threshold"
+
+
+@router.post("/cwl/matchup")
+async def predict_cwl_matchup(request: CWLMatchupRequest):
+    """
+    Predict CWL war outcome against an opponent clan.
+
+    Uses our players' historical attack data + TH priors for opponent predictions.
+
+    Args:
+        request: Our lineup tags, opponent TH distribution, optional war size
+
+    Returns:
+        Expected stars/destruction for both sides, win probability, per-position details
+    """
+    try:
+        result = await predictor.predict_cwl_matchup(
+            our_tags=request.our_lineup_tags,
+            opponent_ths=request.opponent_ths,
+            war_size=request.war_size,
+            opponent_attacks=request.opponent_attacks,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting CWL matchup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

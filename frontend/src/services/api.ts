@@ -196,6 +196,20 @@ export const analytics = {
     })
     return response.data
   },
+
+  /**
+   * Predict CWL war outcome against an opponent clan.
+   * opponent_attacks: actual attack records from current CWL season rounds for that clan
+   */
+  async cwlMatchup(params: {
+    our_lineup_tags: string[]
+    opponent_ths: number[]
+    war_size?: number
+    opponent_attacks?: Array<{ attacker_th: number; defender_th: number; stars: number; destruction: number }>
+  }) {
+    const response = await analyticsApi.post('/cwl/matchup', params)
+    return response.data
+  },
 }
 
 /**

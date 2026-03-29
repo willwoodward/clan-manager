@@ -4,7 +4,7 @@ import { analytics } from '@/services/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Trophy, Star, Swords, AlertCircle, CheckCircle, XCircle, Settings } from 'lucide-react'
+import { Trophy, Star, Swords, AlertCircle, CheckCircle, XCircle, Settings, TrendingUp } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
 import type { MemberWarStats } from '@/types/cwl'
 import { THDistributionChart } from '@/components/th-distribution-chart'
@@ -96,6 +96,8 @@ export function CWL() {
   const [scoringWeights, setScoringWeights] = useState<ScoringWeights>(loadScoringWeights())
   const [selectedLineup, setSelectedLineup] = useState<string[]>(loadLineupSelection())
   const [chartView, setChartView] = useState<'group' | 'league'>('group')
+  const [cwlMatchupResults, setCwlMatchupResults] = useState<Map<string, any>>(new Map())
+  const [analyzingMatchups, setAnalyzingMatchups] = useState(false)
 
   // Fetch clan data for league info
   const { data: clan, isLoading: clanLoading } = useQuery({
@@ -151,56 +153,65 @@ export function CWL() {
       try {
         const stats = await Promise.all(
           clan.memberList.map(async (member) => {
+            // Fetch full player data; fall back to memberList entry if the call fails
+            // so no member is silently dropped from the table
+            let playerData: any = null
             try {
-              const playerData = await clashApi.getPlayer(member.tag)
-
-              // Fetch historical war stats
-              let historicalStats = null
-              try {
-                historicalStats = await analytics.getPlayerStats(member.tag)
-              } catch (error) {
-                // No historical data available
-              }
-
-              // Calculate participation rate
-              const participation = attackParticipation.get(member.tag)
-              const participationRate = participation
-                ? participation.used / participation.total
-                : 0
-
-              // Calculate recommendation score using configurable weights
-              const thScore = playerData.townHallLevel * scoringWeights.thLevel
-              const starScore = playerData.warStars * scoringWeights.warStars
-              const donationScore = (playerData.donations / 100) * scoringWeights.donations
-              const prefScore = playerData.warPreference === 'in' ? scoringWeights.warPreference : 0
-              const leagueScore = playerData.leagueTier?.id ? (playerData.leagueTier.id / 1000000) * scoringWeights.leagueTier : 0
-
-              // Add historical performance scores
-              let historicalScore = 0
-              if (historicalStats && !historicalStats.error) {
-                historicalScore =
-                  (historicalStats.avg_stars || 0) * scoringWeights.avgStars +
-                  ((historicalStats.avg_destruction || 0) / 100) * scoringWeights.avgDestruction +
-                  ((historicalStats.three_star_rate || 0) / 100) * scoringWeights.threeStarRate +
-                  participationRate * scoringWeights.attackParticipation
-              }
-
-              const score = thScore + starScore + donationScore + prefScore + leagueScore + historicalScore
-
-              return {
-                ...playerData,
-                historicalStats,
-                participationRate,
-                score: Math.round(score),
-              }
+              playerData = await clashApi.getPlayer(member.tag)
             } catch (error) {
               console.error(`Error fetching stats for ${member.name}:`, error)
-              return null
+            }
+            const base = playerData ?? {
+              ...member,
+              warPreference: 'out' as const,  // unknown — default to out so score isn't inflated
+              warStars: 0,
+              attackWins: 0,
+              defenseWins: 0,
+            }
+
+            // Fetch historical war stats
+            let historicalStats = null
+            try {
+              historicalStats = await analytics.getPlayerStats(member.tag)
+            } catch (error) {
+              // No historical data available
+            }
+
+            // Calculate participation rate
+            const participation = attackParticipation.get(member.tag)
+            const participationRate = participation
+              ? participation.used / participation.total
+              : 0
+
+            // Calculate recommendation score using configurable weights
+            const thScore = base.townHallLevel * scoringWeights.thLevel
+            const starScore = base.warStars * scoringWeights.warStars
+            const donationScore = (base.donations / 100) * scoringWeights.donations
+            const prefScore = base.warPreference === 'in' ? scoringWeights.warPreference : 0
+            const leagueScore = base.leagueTier?.id ? (base.leagueTier.id / 1000000) * scoringWeights.leagueTier : 0
+
+            // Add historical performance scores
+            let historicalScore = 0
+            if (historicalStats && !historicalStats.error) {
+              historicalScore =
+                (historicalStats.avg_stars || 0) * scoringWeights.avgStars +
+                ((historicalStats.avg_destruction || 0) / 100) * scoringWeights.avgDestruction +
+                ((historicalStats.three_star_rate || 0) / 100) * scoringWeights.threeStarRate +
+                participationRate * scoringWeights.attackParticipation
+            }
+
+            const score = thScore + starScore + donationScore + prefScore + leagueScore + historicalScore
+
+            return {
+              ...base,
+              historicalStats,
+              participationRate,
+              score: Math.round(score),
             }
           })
         )
 
-        setMemberStats(stats.filter(s => s !== null) as Array<MemberWarStats & { score: number; historicalStats?: any; participationRate?: number }>)
+        setMemberStats(stats as Array<MemberWarStats & { score: number; historicalStats?: any; participationRate?: number }>)
       } catch (error) {
         console.error('Error fetching member stats:', error)
       } finally {
@@ -300,6 +311,96 @@ export function CWL() {
     saveLineupSelection([])
   }
 
+  const analyzeMatchups = async () => {
+    if (!selectedLineup.length || !allCWLClans.length || !cwlGroup) return
+    setAnalyzingMatchups(true)
+
+    // Step 1: Fetch all already-played CWL wars from current season rounds and build
+    // per-clan attack maps so we use their real CWL performance instead of TH-level averages
+    type AttackRecord = { attacker_th: number; defender_th: number; stars: number; destruction: number }
+    const clanAttackMap = new Map<string, AttackRecord[]>()
+
+    try {
+      const rounds: Array<{ warTags: string[] }> = cwlGroup.rounds || []
+      const warTagSet = new Set<string>()
+      rounds.forEach(round => {
+        ;(round.warTags || []).forEach(tag => {
+          if (tag && tag !== '#0') warTagSet.add(tag)
+        })
+      })
+
+      await Promise.all(Array.from(warTagSet).map(async (warTag) => {
+        try {
+          const war = await clashApi.getCWLWar(warTag)
+          if (!war || war.state === 'preparation') return
+
+          // Build tag -> TH lookup across both sides
+          const memberTH = new Map<string, number>()
+          const indexMembers = (members: any[]) =>
+            members?.forEach(m => memberTH.set(m.tag, m.townhallLevel ?? m.townHallLevel ?? 0))
+          indexMembers(war.clan?.members ?? [])
+          indexMembers(war.opponent?.members ?? [])
+
+          // Extract attacks for a given side into the map
+          const extractSide = (sideData: any) => {
+            if (!sideData?.members) return
+            const tag: string = sideData.tag
+            const attacks: AttackRecord[] = []
+            sideData.members.forEach((member: any) => {
+              const attackerTh: number = member.townhallLevel ?? member.townHallLevel ?? 0
+              ;(member.attacks ?? []).forEach((atk: any) => {
+                const defenderTh = memberTH.get(atk.defenderTag) ?? 0
+                if (attackerTh && defenderTh) {
+                  attacks.push({
+                    attacker_th: attackerTh,
+                    defender_th: defenderTh,
+                    stars: atk.stars ?? 0,
+                    destruction: atk.destructionPercentage ?? 0,
+                  })
+                }
+              })
+            })
+            if (attacks.length) {
+              const existing = clanAttackMap.get(tag) ?? []
+              clanAttackMap.set(tag, [...existing, ...attacks])
+            }
+          }
+
+          extractSide(war.clan)
+          extractSide(war.opponent)
+        } catch {
+          // skip individual war fetch failures
+        }
+      }))
+    } catch (e) {
+      console.warn('Could not fetch CWL war history for opponent analysis:', e)
+    }
+
+    // Step 2: Analyze each opponent using their actual CWL attacks where available
+    const ourTag = clan?.tag || clanTag
+    const opponents = allCWLClans.filter(c => c.clanTag !== ourTag)
+    const results = new Map<string, any>()
+
+    await Promise.all(opponents.map(async (opp) => {
+      try {
+        const oppThs = opp.members.map(m => m.townHallLevel)
+        const oppAttacks = clanAttackMap.get(opp.clanTag)
+
+        const result = await analytics.cwlMatchup({
+          our_lineup_tags: selectedLineup,
+          opponent_ths: oppThs,
+          opponent_attacks: oppAttacks,
+        })
+        results.set(opp.clanTag, { ...result, clanName: opp.clanName })
+      } catch (e) {
+        console.error(`Failed matchup for ${opp.clanName}:`, e)
+      }
+    }))
+
+    setCwlMatchupResults(results)
+    setAnalyzingMatchups(false)
+  }
+
   // Get selected members for charts
   const selectedMembers = memberStats.filter(m => selectedLineup.includes(m.tag))
 
@@ -361,6 +462,130 @@ export function CWL() {
           showViewToggle={inCWL && allCWLClans.length > 0}
         />
       ) : null}
+
+      {/* CWL Matchup Analysis */}
+      {inCWL && selectedLineup.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  CWL Matchup Analysis
+                </CardTitle>
+                <CardDescription>
+                  Predicted outcomes vs each opponent using your selected lineup ({selectedLineup.length} players)
+                </CardDescription>
+              </div>
+              <button
+                onClick={analyzeMatchups}
+                disabled={analyzingMatchups}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {analyzingMatchups ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <TrendingUp className="h-4 w-4" />
+                    Analyze Matchups
+                  </>
+                )}
+              </button>
+            </div>
+          </CardHeader>
+          {cwlMatchupResults.size > 0 && (
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from(cwlMatchupResults.entries())
+                  .sort((a, b) => b[1].win_probability - a[1].win_probability)
+                  .map(([tag, result]) => {
+                    const winPct = Math.round(result.win_probability * 100)
+                    const isLikelyWin = winPct > 60
+                    const isToClose = winPct >= 40 && winPct <= 60
+                    const isLikelyLoss = winPct < 40
+                    return (
+                      <div
+                        key={tag}
+                        className={`p-4 rounded-lg border ${
+                          isLikelyWin
+                            ? 'border-green-500/50 bg-green-500/5'
+                            : isToClose
+                            ? 'border-yellow-500/50 bg-yellow-500/5'
+                            : 'border-red-500/50 bg-red-500/5'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <div className="font-semibold truncate max-w-[160px]">{result.clanName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {result.war_size}v{result.war_size}
+                              {result.opponent_sample_size > 0
+                                ? ` · ${result.opponent_sample_size} attacks tracked`
+                                : ' · TH avg (no CWL data)'}
+                            </div>
+                          </div>
+                          <Badge
+                            className={
+                              isLikelyWin
+                                ? 'bg-green-500 text-white'
+                                : isToClose
+                                ? 'bg-yellow-500 text-black'
+                                : 'bg-red-500 text-white'
+                            }
+                          >
+                            {isLikelyWin ? 'Likely Win' : isToClose ? 'Too Close' : 'Likely Loss'}
+                          </Badge>
+                        </div>
+
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Us</span>
+                            <span className="font-medium">
+                              {result.our_expected_stars}⭐ &nbsp;{result.our_avg_destruction}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Them</span>
+                            <span className="font-medium">
+                              {result.their_expected_stars}⭐ &nbsp;{result.their_avg_destruction}%
+                            </span>
+                          </div>
+                          <div className="pt-2 border-t">
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Win Probability</span>
+                              <span
+                                className={`font-bold text-base ${
+                                  isLikelyWin
+                                    ? 'text-green-500'
+                                    : isToClose
+                                    ? 'text-yellow-500'
+                                    : 'text-red-500'
+                                }`}
+                              >
+                                {winPct}%
+                              </span>
+                            </div>
+                            <div className="mt-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  isLikelyWin ? 'bg-green-500' : isToClose ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${winPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Member Recommendations */}
       <Card>
