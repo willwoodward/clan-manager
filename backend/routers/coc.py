@@ -213,6 +213,20 @@ async def get_cwl_war(war_tag: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/legend/sample")
+async def get_legend_sample():
+    """
+    Fetch top global legend league rankings + raw legendStatistics from the #1 player.
+    Used to explore what the CoC API exposes for legend league data.
+    """
+    try:
+        data = await coc_client.get_legend_sample()
+        return data
+    except Exception as e:
+        logger.error(f"Error fetching legend sample: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/proxy-image")
 async def proxy_image(url: str):
     """

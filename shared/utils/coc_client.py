@@ -406,6 +406,52 @@ class CoCClient:
             logger.error(f"Error fetching CWL group for {clan_tag}: {e}")
             return None
 
+    async def get_legend_rankings(self, limit: int = 5) -> list:
+        """Get top players from global legend league rankings (location 32000000)."""
+        try:
+            await self.login()
+        except Exception as e:
+            logger.error(f"Login failed for get_legend_rankings: {e}")
+            return []
+
+        try:
+            players = await self.client.get_location_players(location_id=32000000, limit=limit)
+            return [
+                {
+                    "tag": p.tag,
+                    "name": p.name,
+                    "trophies": p.trophies,
+                    "townHallLevel": getattr(p, 'town_hall', 0),
+                    "rank": getattr(p, 'rank', None),
+                    "clan": {"tag": p.clan.tag, "name": p.clan.name} if p.clan else None,
+                }
+                for p in (players or [])
+            ]
+        except Exception as e:
+            logger.error(f"Error fetching legend rankings: {e}")
+            return []
+
+    async def get_player_raw(self, player_tag: str) -> Optional[dict]:
+        """Get raw player data dict directly from the API (bypasses player_to_dict filtering)."""
+        try:
+            await self.login()
+        except Exception as e:
+            logger.error(f"Login failed for get_player_raw: {e}")
+            return None
+
+        try:
+            normalized_tag = self._normalize_tag(player_tag)
+            player = await self.client.get_player(normalized_tag)
+            if player is None:
+                return None
+            # _raw_data is the unfiltered dict straight from the CoC API response
+            return getattr(player, '_raw_data', None)
+        except coc.NotFound:
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching raw player {player_tag}: {e}")
+            return None
+
     async def get_cwl_war(self, war_tag: str):
         """
         Get specific CWL war.

@@ -65,6 +65,14 @@ class BackendCoCClient:
             return None
         return CoCClient.cwl_group_to_dict(group)
 
+    async def get_legend_sample(self) -> dict:
+        """Fetch top global rankings + raw legendStatistics from the #1 player."""
+        rankings = await self.coc_client.get_legend_rankings(limit=5)
+        sample = None
+        if rankings:
+            sample = await self.coc_client.get_player_raw(rankings[0]["tag"])
+        return {"rankings": rankings, "sample_player": sample}
+
     async def get_cwl_war(self, war_tag: str) -> Optional[dict]:
         """Get CWL war as dict."""
         war = await self.coc_client.get_cwl_war(war_tag)

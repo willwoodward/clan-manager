@@ -1,15 +1,7 @@
 name: Deploy Backend to DigitalOcean
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/**'
-      - 'shared/**'
-      - 'Dockerfile.prod'
-      - 'docker-compose.prod.yml'
-      - 'requirements.txt'
-      - '.github/workflows/deploy-backend.yml'
+  # Auto-deploy disabled - droplet repurposed
   workflow_dispatch:
 
 permissions:
